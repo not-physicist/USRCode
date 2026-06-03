@@ -158,7 +158,8 @@ def get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired):
     """
     # P_desired = 2e-3
     # interpolator for approximate roots
-    itp = CubicSpline([-20, -10, -5, -1], [8.46198627e-05, 5.62065147e-05, 3.78923316e-05, 1.51516104e-05])
+    # itp = CubicSpline([-20, -10, -5, -1], [8.46198627e-05, 5.62065147e-05, 3.78923316e-05, 1.51516104e-05])
+    itp = CubicSpline([-20, -10, -5, -1], [9.131304878971815e-05, 5.799549787583399e-05, 3.905100757912693e-05, 1.5805344608102757e-05])
 
     def _get_h_P_max(β, ΔN):
         """
@@ -192,19 +193,17 @@ def get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired):
         # (but good enough as estimate for it)
         # use root finding again
         sol, fo = toms748(lambda y: _get_h_P_max(x, y)[1] - P_desired, 
-                          ΔN1*0.9, ΔN1*1.1, rtol=1e-3, full_output=True)
-        if fo.converged:
-            print("Found the right ΔN!")
-            print(fo)
+                          ΔN1*0.9, ΔN1*1.1, rtol=1e-3, full_output=True, disp=True)
 
-            model = USRManuel(ϵ, x, N2 , sol, dn, silent=True)
+        print("Found the right ΔN!")
+        print(fo)
 
-            with open(join(model.dn, MODEL_CACHE_FN), "wb") as f:
-                pickle.dump(model, f)
+        model = USRManuel(ϵ, x, N2 , sol, dn, silent=True)
 
-            return model
-        else:
-            raise Exception("Finding the right ΔN failed!")
+        with open(join(model.dn, MODEL_CACHE_FN), "wb") as f:
+            pickle.dump(model, f)
+
+        return model
     
     # Find the roots (appropriate β and ΔN)
     fn = join(dn, "roots.pkl")
@@ -221,28 +220,26 @@ def get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired):
             bracket = [root_approx*0.9, root_approx*1.1]
 
             sol, fo = toms748(lambda x: _get_f_only_β(x).h - h_desired_all[i], *bracket, 
-                              rtol=1e-2, maxiter=20, full_output=True)
+                              rtol=1e-2, maxiter=20, full_output=True, disp=True)
 
-            if fo.converged:
-                print("Found the right β!")
-                print(fo)
-                
-                with open(join(dn, MODEL_CACHE_FN), "rb") as f:
-                    model = pickle.load(f)
-                
-                # only to regenerate the model object,
-                # if the root finding algo "took a step beyond"
-                if model.β != sol:
-                    model = _get_f_only_β(sol)
+            print("Found the right β!")
+            print(fo)
+            
+            with open(join(dn, MODEL_CACHE_FN), "rb") as f:
+                model = pickle.load(f)
+            
+            # only to regenerate the model object,
+            # if the root finding algo "took a step beyond"
+            if model.β != sol:
+                print(f"Recomputing ΔN... {model.β} != {sol}")
+                model = _get_f_only_β(sol)
 
-                dn_new = join(dn, f"h={h_desired_all[i]:.1f}/")
-                model.change_dn(dn_new)
-                models_all.append(model)
-            else:
-                raise Exception("Finding the right β failed!")
+            models_all.append(model)
         
         with open(fn, "wb") as f:
             pickle.dump(models_all, f)
+    
+    print("Roots: ", [(x.β, x.ΔN)for x in models_all])
 
     return models_all
 
@@ -255,23 +252,26 @@ def plot_fixed_height():
     P_desired = 2e-3
     N2 = 20
     ϵ = 1e-3
-    h_desired_all = [-10]
-    # h_desired_all = [-20, -10, -5, -1]
+    # h_desired_all = [-10]
+    h_desired_all = [-20, -10, -5, -1]
     # h_desired_all = np.linspace(-20, -1, 16)
     dn = "fixed_height/"
 
     # get the desired β and ΔN
     models_all = get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired)
     # print(roots_all)
+    if len(models_all) != len(h_desired_all):
+        raise RuntimeError("You probably want to compute the roots again!")
     
     # plot power spectra together
     fig, ax = plt.subplots()
     
-    res = np.zeros((len(models_all), 8))
     # Now compute Σ and f_tot more carefully (more data points)
+    res = np.zeros((len(models_all), 8))
     for i in range(0, len(models_all)):
         model = models_all[i]
-        # dni = join(dn, f"h={h_desired_all[i]:.1f}/")
+        dn_new = join(dn, f"h={h_desired_all[i]:.1f}/")
+        model.change_dn(dn_new)
 
         res[i] = compute_single(model, only_P_max=False, N_ms=500, log_k_min=-2, log_k_max=4, force_new=True)
         print("P_max = ", res[i, 0])

@@ -289,3 +289,4 @@ class USRManuel():
     
     def change_dn(self, new_dn):
         self.dn = new_dn
+        Path(self.dn).mkdir(parents=True, exist_ok=True)
