@@ -1,0 +1,15 @@
+*__pycache__*
+*old-code*
+*old-data*
+figs
+data
+compare_ps
+fixed_height
+.python-version
+poetry.lock
+src/gw/test.py
+src/ms/new_pot
+src/ms/ms-old
+src/ms/ODE-old
+src/ms/results_mine*
+test_single
