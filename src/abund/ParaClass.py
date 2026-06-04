@@ -211,7 +211,7 @@ class ParaClassMod(ParaClass):
         """
         return np.interp(x, self._k, self._P, left=0.0, right=0.0)
 
-    def plot_Σ_int(self, suffix=""):
+    def plot_Σ_int(self, dn):
         fig, ax = plt.subplots()
         
         # X = np.logspace(np.log(np.amin(self._k)), np.log(np.amax(self._k)), 1000)
@@ -226,5 +226,5 @@ class ParaClassMod(ParaClass):
         ax.set_ylim((1e-6, 5e-2))
         ax.legend()
 
-        plt.savefig("find_var_h/Sigma_int"+suffix+".pdf", bbox_inches="tight")
+        plt.savefig(join(dn, "Sigma_int.pdf"), bbox_inches="tight")
         plt.close(fig)

@@ -186,10 +186,13 @@ def solve_SR2(β, ϕₑ, πₑ, V0):
         raise ValueError
 
 def get_ϕₑ(β, πₑ, V0, N2):
+    """
+    vary ϕₑ to get the desired N2
+    """
     # print("N2 =", get_N2(β, 10.0, πₑ, self.V0))
     _f = lambda x: solve_SR2(β, x, πₑ, V0).t[-1] - N2
 
-    sol = optimize.root_scalar(_f, bracket=[1, 10], method='bisect', rtol=1e-4)
+    sol = optimize.root_scalar(_f, bracket=[1, 10], method='bisect', rtol=1e-3)
 
     if sol.converged:
         return sol.root 
@@ -239,13 +242,13 @@ class USRManuel():
         if r > 0.056:
             raise ValueError("CMB tensor-to-scalar ratio bound breached: r =", r)
 
-        sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i)
+        # sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i)
         self.πᵢ = sol1.y[1][-1]
         # print(-np.sqrt(2*self.ϵ), self.πᵢ)
 
         # USR phase 
         # self.Δϕ, self.πₑ = get_Δϕ_πe(self.V0, self.ΔN, self.πᵢ)
-        sol2 = solve_USR(self.V0, self.ΔN, self.πᵢ)
+        # sol2 = solve_USR(self.V0, self.ΔN, self.πᵢ)
         self.Δϕ = -sol2.y[0, -1]
         self.πₑ = sol2.y[1, -1]
         # print(self.πᵢ, self.πₑ)
@@ -262,7 +265,10 @@ class USRManuel():
         self.ϵ2 = 18 / self.ϕₑ**2 * (self.β / (1+2*self.β))**2 
         self.η2 = 6 / self.ϕₑ**2 * (2*self.β - 1) / (1 + 2*self.β)
         self.h = 6 * np.sqrt(2*self.ϵ2) / self.πₑ
-    
+        
+        # sol3 = solve_SR2(self.β, self.ϕₑ, self.πₑ, self.V0)
+        # self.sol_full = self.get_sol_full(sol1, sol2, sol3)
+
         if not silent:
             print("Class initiated:", vars(self))
             print("Initiation took %.2f s" % (t1 - t0))
@@ -290,3 +296,13 @@ class USRManuel():
     def change_dn(self, new_dn):
         self.dn = new_dn
         Path(self.dn).mkdir(parents=True, exist_ok=True)
+
+    def get_sol_full(self, sol1, sol2, sol3):
+        """
+        to construct the full sol object from three sol's
+        this seems very bad, (the power spectrum from this
+        """
+        N = np.append(sol1.t - sol1.t[-1] - sol2.t[-1], np.append(sol2.t-sol2.t[-1], sol3.t))
+        ϕ = np.append(sol1.y[0] + self.Δϕ + self.ϕₑ, np.append(sol2.y[0] + self.ϕₑ + self.Δϕ, sol3.y[0]))
+        π = np.append(sol1.y[1], np.append(sol2.y[1], sol3.y[1]))
+        return N, ϕ, π

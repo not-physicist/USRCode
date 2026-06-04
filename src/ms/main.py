@@ -10,6 +10,8 @@ from pathlib import Path
 from os.path import join
 from scipy.optimize import toms748
 
+from ..constants import EOM_PLOT_FN
+
 COMPARE_DN = "compare_ps/"
 
 def _get_P_all(fn, models, num, log_k_min, log_k_max):
@@ -202,16 +204,62 @@ def compare_h():
     plt.close(fig)
 
 
+def compare_EOM(model, sol):
+    """
+    compare the EOM from model object and from EOM.py
+    """
+    # compare the background ϕ(t)
+    fig, (ax1, ax2) = plt.subplots(ncols=2)
+
+    ax1.plot(sol[0], sol[1], c="k")
+    ax1.plot(model.sol_full[0], model.sol_full[1], ls="--")
+    ax1.set_xlabel(r"$N-N_e$")
+    ax1.set_ylabel(r"$\phi$")
+
+    itp = lambda x: np.interp(x, model.sol_full[0], model.sol_full[1])
+    ax2.plot(sol[0], np.abs((sol[1] - itp(sol[0]))/sol[1]), c='k')
+    ax2.set_xlabel("$N-N_e$")
+    ax2.set_ylabel(r"$\Delta_\text{rel} \phi$")
+    
+    print("ϕᵢ:", model.ϕᵢ, itp(-model.ΔN), np.interp(-model.ΔN, sol[0], sol[1]))
+    print("ϕₑ:", model.ϕₑ, itp(0.0), np.interp(0.0, sol[0], sol[1]))
+    itp2 = lambda x: np.interp(x, sol[1][::-1], sol[0][::-1])
+    print("ΔN from EOM.py: ", itp2(model.ϕᵢ) - itp2(model.ϕₑ))
+    print("Δϕ: ", model.Δϕ)
+    
+    fn = join(model.dn, EOM_PLOT_FN)
+    plt.savefig(fn)
+    plt.close(fig)
+
+    # compare the power spectrum
+    backgrounds = ms.get_ms_quant(model, sol)
+    k, P = ms.solve_power_spec(*backgrounds, model.ϕᵢ, plot_fn=None, num=400, log_k_min=-2, log_k_max=3)
+    backgrounds_model = ms.get_ms_quant(model, model.sol_full)
+    k_model, P_model = ms.solve_power_spec(*backgrounds_model, model.ϕᵢ, plot_fn=None, num=400, log_k_min=-2, log_k_max=3)
+
+    fig, ax = plt.subplots()
+    ax.plot(k, P, c="k")
+    ax.plot(k_model, P_model, ls="--")
+    # ax.plot(sol[0], backgrounds[3], c="k")
+    # ax.plot(model.sol_full[0], backgrounds_model[3], ls="--")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    
+    plt.savefig(join(model.dn, "PS_comp.pdf"), bbox_inches="tight")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
-    compare_DeltaN()
+    # compare_DeltaN()
     # compare_beta()
     # compare_eps()
 
     # find_β(1e-3, 22, 2.0, -20, [1e-5, 1e-3])
     # compare_h()
 
-    # model = USRManuel(0.001, 1e-3, 22, 2.0, "new_pot/")
-    # sol = EOM.solve_eom(model, True)
+    model = USRManuel(0.001, 1e-3, 22, 2.0, "new_pot/")
+    sol = EOM.solve_eom(model, True)
+    compare_EOM(model, sol)
 
     # ms.plot_z(model, sol)
     # ms.plot_power_evolution(model, sol)
