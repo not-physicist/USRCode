@@ -65,7 +65,8 @@ class ParaClass:
         # Σ = quad(f, 0, 1000, limit=200, epsrel=1e-5, points=p)
         # return Σ[0]
         
-        X = np.arange(1e-3, 1000, 1e-4)
+        # X = np.arange(1e-3, 1000, 1e-4)
+        X = np.logspace(-3, 3, 100000, base=10)
         Σ = simpson(f(X), X)
         # print(Σ)
         return Σ

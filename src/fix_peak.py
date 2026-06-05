@@ -2,6 +2,7 @@ from pathlib import Path
 # from time import perf_counter
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import colormaps, cm
 # import matplotlib as mpl
 # from os.path import exists
 #  from scipy.special import erf
@@ -42,6 +43,9 @@ from .abund import USR_smooth
 from .constants import POWER_SPEC_FN, POWER_SPEC_PLOT_FN, MODEL_CACHE_FN
 from .common import timer 
 
+# relative tolerance for root finding
+DELTAN_RTOL = 1e-5 
+BETA_RTOL = 1e-4
 
 # @common.timer
 def test_single():
@@ -81,6 +85,7 @@ def compute_single(model, only_P_max=False, N_ms=200, force_new=False, log_k_min
     ms.save_solve_all(model, False, N_ms=N_ms, force_new=force_new, log_k_min=log_k_min, log_k_max=log_k_max, silent=silent)
     fn = join(model.dn, POWER_SPEC_FN)
     P_max = np.amax(pickle.load(open(fn, "rb"))[1])
+    # print("P_max = ", P_max)
 
     if only_P_max:
         return P_max
@@ -111,7 +116,7 @@ def get_fs(model, para, get_Σ=False):
         return f_1, f_2, f_3, f_4
 
 
-def get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired):
+def get_model_fixed_height(N2, ϵ, h_desired, P_desired, dn):
     """
     find the appropriate β and ΔN to get the desired h and P_max
     returns and saves the correspinding model files
@@ -127,7 +132,7 @@ def get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired):
         """
         model = USRManuel(ϵ, β, N2, ΔN, dn, silent=True)
         P_max = compute_single(model, only_P_max=True, 
-                               force_new=True, N_ms=50, log_k_min=0, log_k_max=2, silent=True)
+                               force_new=True, N_ms=50, log_k_min=0, log_k_max=1, silent=True)
         print(f"h ={model.h}, max(P)={P_max}")
         # return [model.h - h_desired, P_max - P_desired]
         return [model.h, P_max]
@@ -153,7 +158,7 @@ def get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired):
         # (but good enough as estimate for it)
         # use root finding again
         sol, fo = toms748(lambda y: _get_h_P_max(x, y)[1] - P_desired, 
-                          ΔN1*0.9, ΔN1*1.1, rtol=1e-3, full_output=True, disp=True)
+                          ΔN1*0.9, ΔN1*1.1, rtol=DELTAN_RTOL, full_output=True, disp=True)
 
         print("Found the right ΔN!")
         print(fo)
@@ -162,37 +167,28 @@ def get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired):
 
         return model
     
-    # Find the roots (appropriate β and ΔN)
-    fn = join(dn, "roots.pkl")
-    if Path.exists(fn):
-        print("Found cache for roots. Skipping...")
-        with open(fn, "rb") as f:
-            models_all = pickle.load(f)
+    model_fn = join(dn, MODEL_CACHE_FN) 
+    if Path(model_fn).exists():
+        print(f"Model cache {model_fn} exists. Skipping...")
+        model = pickle.load(open(join(dn, MODEL_CACHE_FN), "rb"))
     else:
-        # models_all = np.zeros((len(h_desired_all), 2))
-        models_all = []
+        print(f"Model cahce {model_fn} not found. Finding the root...")
+        root_approx = itp(h_desired)
+        bracket = [root_approx*0.9, root_approx*1.1]
 
-        for i in range(0, len(h_desired_all)):
-            root_approx = itp(h_desired_all[i])
-            bracket = [root_approx*0.9, root_approx*1.1]
+        sol, fo = toms748(lambda x: _get_f_only_β(x).h - h_desired, *bracket, 
+                          rtol=BETA_RTOL, maxiter=20, full_output=True, disp=True)
 
-            sol, fo = toms748(lambda x: _get_f_only_β(x).h - h_desired_all[i], *bracket, 
-                              rtol=1e-2, maxiter=20, full_output=True, disp=True)
+        print("Found the right β!")
+        print(fo)
+        
+        print(f"Recomputing ΔN...")
+        model = _get_f_only_β(sol)
 
-            print("Found the right β!")
-            print(fo)
-            
-            print(f"Recomputing ΔN... {model.β} != {sol}")
-            model = _get_f_only_β(sol)
+        with open(model_fn, "wb") as f:
+            pickle.dump(model, f)
 
-            models_all.append(model)
-       
-        with open(fn, "wb") as f:
-            pickle.dump(models_all, f)
-    
-    print("Roots: ", [(x.β, x.ΔN) for x in models_all])
-
-    return models_all
+    return model
 
 
 def plot_fixed_height():
@@ -204,41 +200,50 @@ def plot_fixed_height():
     N2 = 20
     ϵ = 1e-3
     # h_desired_all = [-10]
-    h_desired_all = [-20, -10, -5, -1]
+    # h_desired_all = [-20, -10, -5, -1]
     # h_desired_all = np.linspace(-20, -1, 16)
+    h_desired_all = np.arange(-20, -1, 2)
     dn = "fixed_height/"
+    cmap = colormaps["viridis_r"]
+    N_ms = 500
 
-    # get the desired β and ΔN
-    models_all = get_roots_fixed_height(N2, ϵ, h_desired_all, dn, P_desired)
     # print(roots_all)
-    if len(models_all) != len(h_desired_all):
-        raise RuntimeError("You probably want to compute the roots again!")
     
     # plot power spectra together
     fig, ax = plt.subplots()
     
     # Now compute Σ and f_tot more carefully (more data points)
-    res = np.zeros((len(models_all), 8))
-    for i in range(0, len(models_all)):
-        model = models_all[i]
-
+    res = np.zeros((len(h_desired_all), 8))
+    for i in range(0, len(h_desired_all)):
+        print("="*100)
         dn_new = join(dn, f"h={h_desired_all[i]:.1f}/")
-        model.change_dn(dn_new)
-        with open(join(model.dn, MODEL_CACHE_FN), "wb") as f:
-            pickle.dump(model, f)
-
-        res[i] = compute_single(model, only_P_max=False, N_ms=500, log_k_min=-2, log_k_max=4, force_new=True)
-        print("P_max = ", res[i, 0])
+        model = get_model_fixed_height(N2, ϵ, h_desired_all[i], P_desired, dn_new)
 
         with open(join(model.dn + POWER_SPEC_FN), "rb") as f:
             k, P = pickle.load(f)
-            ax.plot(k, P, label=f"$h={model.h:.1f}$")
+
+        if len(k) == N_ms:
+            print("The complete power spectrum has been computed. Skipping...")
+            res[i] = compute_single(model, only_P_max=False, N_ms=N_ms, log_k_min=-2, log_k_max=4, force_new=False)
+        else:
+            res[i] = compute_single(model, only_P_max=False, N_ms=N_ms, log_k_min=-2, log_k_max=4, force_new=True)
+
+        print("P_max = ", res[i, 0])
+        
+        c = cmap(i/(len(h_desired_all)-1))
+        if i in range(0, len(h_desired_all))[::2]:
+        # skipping some h, so that the PS doesn't look so dense
+            with open(join(model.dn + POWER_SPEC_FN), "rb") as f:
+                k, P = pickle.load(f)
+                ax.plot(k, P, c=c)
+    
+    map = cm.ScalarMappable(norm=plt.Normalize(vmin=np.amin(h_desired_all), vmax=np.amax(h_desired_all)), cmap=cmap)
+    fig.colorbar(map, ax=ax, label=r"$h$")
 
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("$k/k_i$")
     ax.set_ylabel(r"$\mathcal{P}_\mathcal{R}$")
-    ax.legend()
     plt.savefig(join(dn, POWER_SPEC_PLOT_FN), bbox_inches="tight")
     plt.close(fig)
 
@@ -284,5 +289,7 @@ if __name__ == "__main__":
     # plot_DeltaN_Pmax()
     # find_β(1e-3, 20, 2.0, -10, [1e-5, 1e-3])
     # get_roots_fixed_height(20, 1e-3, [-10], "fixed_height/", 2e-3)
-    # plot_fixed_height()
     # check_Sigma_int()
+    get_model_fixed_height(20, 1e-3, -16, 2e-3, "fixed_height/h=-16.0/")
+    # plot_fixed_height()
+

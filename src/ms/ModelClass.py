@@ -242,13 +242,13 @@ class USRManuel():
         if r > 0.056:
             raise ValueError("CMB tensor-to-scalar ratio bound breached: r =", r)
 
-        # sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i)
+        sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i)
         self.πᵢ = sol1.y[1][-1]
         # print(-np.sqrt(2*self.ϵ), self.πᵢ)
 
         # USR phase 
         # self.Δϕ, self.πₑ = get_Δϕ_πe(self.V0, self.ΔN, self.πᵢ)
-        # sol2 = solve_USR(self.V0, self.ΔN, self.πᵢ)
+        sol2 = solve_USR(self.V0, self.ΔN, self.πᵢ)
         self.Δϕ = -sol2.y[0, -1]
         self.πₑ = sol2.y[1, -1]
         # print(self.πᵢ, self.πₑ)
