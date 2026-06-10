@@ -1,6 +1,9 @@
 *__pycache__*
 *old-code*
 *old-data*
+*.pkl
+*.npz
+*.pdf
 figs
 compare_ps
 fixed_height

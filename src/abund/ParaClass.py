@@ -5,19 +5,23 @@
 import numpy as np
 from scipy.integrate import quad
 from scipy.integrate import simpson
-from scipy.integrate import trapezoid
+# from scipy.integrate import trapezoid
 #  import sympy as sp
 import matplotlib.pyplot as plt
 import pickle
 from os.path import join
+from scipy.interpolate import CubicSpline
+from pathlib import Path
 
 from ..constants import POWER_SPEC_FN
+from ..common import timer
 
 π = np.pi
 # break points for the spehrical bessel functions; 
 # seems that the first few are enough
 # j0_zeros = [3.141593, 6.283185, 9.424778, 12.566371, 15.707963]
 # j1_zeros = [4.493409, 7.725252, 10.904122, 14.066194, 17.220755]
+# TODO: get the zeros up to 1000
 
 j0 = lambda x: np.sin(x) / x
 dj0_dz = lambda x: np.cos(x) / x - np.sin(x) / x**2
@@ -50,26 +54,33 @@ class ParaClass:
         else:
             return ValueError("which Σ do you mean?")
         return dΣ
-
+    
+    # @timer
     def _calc_Σ(self, which):
         """
         return the variance depends on A and which variance
+        naively integrating using discrete method seems very bad
+        here use quadrature with the power spectrum interpolated 
+        since the bessel functions are (highly) oscillatory
+        need to use breakpoint corresponding to the zeros
         """
         f = lambda x: self._get_Σ_integrand(x, which)
-        # if which == 1:
-        #     p = j1_zeros
-        # elif which == 2:
-        #     p = j0_zeros + j1_zeros
-        # else:
-        #     p = j1_zeros
-        # Σ = quad(f, 0, 1000, limit=200, epsrel=1e-5, points=p)
-        # return Σ[0]
-        
-        # X = np.arange(1e-3, 1000, 1e-4)
-        X = np.logspace(-3, 3, 100000, base=10)
-        Σ = simpson(f(X), X)
-        # print(Σ)
-        return Σ
+        if which == 1:
+            p = self.j1z
+        elif which == 2:
+            p = self.j0z + self.j1z
+        else:
+            p = self.j0z
+
+        # upper limit of integral = larged zero saved (around 1000)
+        ul = np.amax(p)
+        # limit for subinteval: must be (much) larger than number of breakt points
+        Σ = quad(f, 0, ul, limit=p.shape[0]*20, points=p, epsrel=1e-5)
+        print(Σ)
+        return Σ[0]
+        # TODO: potential optimization (currect ~1s per variance)
+        # a wrapper function to breakt down the entire integral according to break points
+        # then use multiprocessing to caclulate the different intevals
 
     def get_m_from_C_l(self, C_l):
         """
@@ -91,6 +102,20 @@ class ParaClass:
         m_max = self.get_m_from_C_l(self.C_l_max)
         print("m ∈", "(", m_min, m_max, ") M_H")
         return m_min, m_max
+
+    # @timer
+    def read_jnz(self):
+        """
+        read out the pre-saved zeros of bessel functions
+        by find_bessel_zeros.py
+        """
+        fn = "data/jnz.npz"
+        if Path(fn).exists():
+            data = np.load(fn)
+            # print(data)
+            return data["j0z"], data["j1z"]
+        else:
+            raise Exception("jnz.npz not found! You might want to run find_bessel_zeros.py first!")
 
     def __init__(self, A, Δ, k_star, k_star_r, K, C_c, Z):
         """
@@ -119,6 +144,7 @@ class ParaClass:
         '''
 
         # Sigmas
+        self.j0z, self.j1z = self.read_jnz()
         self.XX = self._calc_Σ(1)
         self.XY = self._calc_Σ(2)
         self.YY = self._calc_Σ(3)
@@ -210,7 +236,13 @@ class ParaClassMod(ParaClass):
             if not, return 0
         k in unit of k_s.
         """
-        return np.interp(x, self._k, self._P, left=0.0, right=0.0)
+        # return np.interp(x, self._k, self._P, left=0.0, right=0.0)
+        # return np.exp(np.interp(np.log(x), np.log(self._k), np.log(self._P), left=-np.inf, right=-np.inf))
+        cs = CubicSpline(self._k, self._P)
+        if x >= np.amin(self._k) and x <= np.amax(self._k):
+            return cs(x)
+        else:
+            return 0.0
 
     def plot_Σ_int(self, dn):
         fig, ax = plt.subplots()
