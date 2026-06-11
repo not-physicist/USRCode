@@ -20,31 +20,20 @@ import scienceplots
 plt.style.use("science")
 
 from . import common 
-from .common import get_zero
-from .common import get_one
+from .common import get_zero, get_one
 
 from .import ms
 from .ms import USRManuel
-from .ms import EOM
-# from .ms.main import find_β
 
-from .abund import ParaClassMod
-# from .abund import ParaClass
-from .abund import get_f_total
-# from .abund import plot_integrand_2D
+from .abund import ParaClassMod, get_f_total
 
-from .abund import USR_full
-from .abund import USR_only
-from .abund import USR_smooth
-# from .abund import gaussian
+from .abund import USR_full, USR_only, USR_smooth
 
-# from .gw import get_Ω
-
-from .constants import POWER_SPEC_FN, POWER_SPEC_PLOT_FN, MODEL_CACHE_FN
-from .common import timer 
+from .constants import POWER_SPEC_FN, POWER_SPEC_PLOT_FN, MODEL_CACHE_FN, PEAK_K
+# from .common import timer 
 
 # relative tolerance for root finding
-DELTAN_RTOL = 1e-5 
+DELTAN_RTOL = 1e-5
 BETA_RTOL = 1e-4
 
 # @common.timer
@@ -82,14 +71,19 @@ def compute_single(model, only_P_max=False, N_ms=200, force_new=False, log_k_min
     """
 
     # model = USRManuel(ϵ, β, N2, DeltaN, dir_n)
-    ms.save_solve_all(model, False, N_ms=N_ms, force_new=force_new, log_k_min=log_k_min, log_k_max=log_k_max, silent=silent)
-    fn = join(model.dn, POWER_SPEC_FN)
-    P_max = np.amax(pickle.load(open(fn, "rb"))[1])
+    k, P = ms.save_solve_all(model, False, N_ms=N_ms, force_new=force_new, log_k_min=log_k_min, log_k_max=log_k_max, silent=silent)
+    P_max = np.amax(P)
+    # fn = join(model.dn, POWER_SPEC_FN)
+    # P_max = np.amax(pickle.load(open(fn, "rb"))[1])
     # print("P_max = ", P_max)
 
     if only_P_max:
         return P_max
     else:
+        fn_ps = join(model.dn, POWER_SPEC_FN)
+        with open(fn_ps, "wb") as f:
+            pickle.dump((k, P), f)
+
         Z = common.get_Z(model.V0, model.N2)
         para = ParaClassMod(Z, model.dn)
         para.plot_Σ_int(model.dn)
@@ -116,15 +110,11 @@ def get_fs(model, para, get_Σ=False):
         return f_1, f_2, f_3, f_4
 
 
-def get_model_fixed_height(N2, ϵ, h_desired, P_desired, dn):
+def get_model_fixed_height(N2, ϵ, h_desired, P_desired, bracket, dn):
     """
     find the appropriate β and ΔN to get the desired h and P_max
     returns and saves the correspinding model files
     """
-    # P_desired = 2e-3
-    # interpolator for approximate roots
-    # itp = CubicSpline([-20, -10, -5, -1], [8.46198627e-05, 5.62065147e-05, 3.78923316e-05, 1.51516104e-05])
-    itp = CubicSpline([-20, -10, -5, -1], [9.131304878971815e-05, 5.799549787583399e-05, 3.905100757912693e-05, 1.5805344608102757e-05])
 
     def _get_h_P_max(β, ΔN):
         """
@@ -132,8 +122,8 @@ def get_model_fixed_height(N2, ϵ, h_desired, P_desired, dn):
         """
         model = USRManuel(ϵ, β, N2, ΔN, dn, silent=True)
         P_max = compute_single(model, only_P_max=True, 
-                               force_new=True, N_ms=50, log_k_min=0, log_k_max=1, silent=True)
-        print(f"h ={model.h}, max(P)={P_max}")
+                               force_new=True, N_ms=1, log_k_min=np.log10(PEAK_K), log_k_max=1, silent=True)
+        print(f"β = {β}, ΔN = {ΔN}, h ={model.h}, max(P)={P_max}")
         # return [model.h - h_desired, P_max - P_desired]
         return [model.h, P_max]
 
@@ -173,8 +163,7 @@ def get_model_fixed_height(N2, ϵ, h_desired, P_desired, dn):
         model = pickle.load(open(join(dn, MODEL_CACHE_FN), "rb"))
     else:
         print(f"Model cahce {model_fn} not found. Finding the root...")
-        root_approx = itp(h_desired)
-        bracket = [root_approx*0.9, root_approx*1.1]
+        # bracket = [root_approx*0.8, root_approx*1.2]
 
         sol, fo = toms748(lambda x: _get_f_only_β(x).h - h_desired, *bracket, 
                           rtol=BETA_RTOL, maxiter=20, full_output=True, disp=True)
@@ -199,13 +188,17 @@ def plot_fixed_height():
     P_desired = 2e-3
     N2 = 20
     ϵ = 1e-3
-    # h_desired_all = [-10]
+    h_desired_all = [-20]
     # h_desired_all = [-20, -10, -5, -1]
     # h_desired_all = np.linspace(-20, -1, 16)
-    h_desired_all = np.arange(-20, -1, 2)
+    # h_desired_all = np.arange(-20, -1, 2)
     dn = "fixed_height/"
     cmap = colormaps["viridis_r"]
     N_ms = 500
+    # interpolator for approximate roots for P_desired = 2e-3
+    approx_beta_itp = CubicSpline([-20, -10, -5, -1], [9.131304878971815e-05, 5.799549787583399e-05, 3.905100757912693e-05, 1.5805344608102757e-05])
+    # 4e-3
+    # approx_beta_itp = CubicSpline([-20], [5.689789227406057e-05])
 
     # print(roots_all)
     
@@ -217,12 +210,16 @@ def plot_fixed_height():
     for i in range(0, len(h_desired_all)):
         print("="*100)
         dn_new = join(dn, f"h={h_desired_all[i]:.1f}/")
-        model = get_model_fixed_height(N2, ϵ, h_desired_all[i], P_desired, dn_new)
+        approx_beta = approx_beta_itp(h_desired_all[i])
+        bracket = [approx_beta*0.9, approx_beta*1.1]
+        model = get_model_fixed_height(N2, ϵ, h_desired_all[i], 
+                                       P_desired, bracket, dn_new)
+        print(vars(model))
 
-        with open(join(model.dn + POWER_SPEC_FN), "rb") as f:
-            k, P = pickle.load(f)
+        # with open(join(model.dn + POWER_SPEC_FN), "rb") as f:
+        #     k, P = pickle.load(f)
 
-        if len(k) == N_ms:
+        if Path(join(model.dn + POWER_SPEC_FN)).exists():
             print("The complete power spectrum has been computed. Skipping...")
             res[i] = compute_single(model, only_P_max=False, N_ms=N_ms, log_k_min=-2, log_k_max=4, force_new=False)
         else:
@@ -290,6 +287,5 @@ if __name__ == "__main__":
     # find_β(1e-3, 20, 2.0, -10, [1e-5, 1e-3])
     # get_roots_fixed_height(20, 1e-3, [-10], "fixed_height/", 2e-3)
     # check_Sigma_int()
-    get_model_fixed_height(20, 1e-3, -16, 2e-3, "fixed_height/h=-16.0/")
-    # plot_fixed_height()
-
+    # get_model_fixed_height(20, 1e-3, -20, 3e-3, [4e-5, 8e-5], "fixed_height/h=-20.0/")
+    plot_fixed_height()

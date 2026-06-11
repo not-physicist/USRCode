@@ -134,7 +134,7 @@ def solve_USR(V0, ΔN, πᵢ):
     get_term.terminal = True
     _V = lambda x: V0 
     _dV = lambda x: 0.0
-    sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), tspan, initials, events=get_term, method=SOLVER_MODELCLASS, max_step=STEP_SIZE_MODELCLASS)
+    sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), tspan, initials, events=get_term, method=SOLVER_MODELCLASS, max_step=STEP_SIZE_MODELCLASS/10)
 
     if sol.status == 1:
         # check analytical results
@@ -169,7 +169,7 @@ def solve_SR2(β, ϕₑ, πₑ, V0):
     """
     # print(β, ϕₑ, πₑ, V0)
 
-    trange = [0, 200]
+    trange = [0, 50]
     initials = [ϕₑ, πₑ, 1.0]
     
     def get_e1(t, y): return np.abs(y[1]**2/2) - 1
@@ -182,15 +182,24 @@ def solve_SR2(β, ϕₑ, πₑ, V0):
     if sol.status == 1:
         return sol
     else:
-        print(sol.message)
-        raise ValueError
+        # print(sol.message)
+        # raise RuntimeError("solve_SR2() reached the end!")
+
+        # this should not throw an error 
+        # if it reached the end, it simply means that the ϕₑ is not correct
+        return np.nan
 
 def get_ϕₑ(β, πₑ, V0, N2):
     """
     vary ϕₑ to get the desired N2
     """
     # print("N2 =", get_N2(β, 10.0, πₑ, self.V0))
-    _f = lambda x: solve_SR2(β, x, πₑ, V0).t[-1] - N2
+    def _f(x):
+        sol = solve_SR2(β, x, πₑ, V0)
+        if sol is np.nan:
+            return np.inf
+        else:
+            return sol.t[-1] - N2
 
     sol = optimize.root_scalar(_f, bracket=[1, 10], method='bisect', rtol=1e-3)
 
@@ -198,7 +207,7 @@ def get_ϕₑ(β, πₑ, V0, N2):
         return sol.root 
     else:
         print(sol)
-        raise ValueError
+        raise RuntimeError("Finding ϕₑ not successful!")
 
 class USRManuel():
     """

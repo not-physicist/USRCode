@@ -14,14 +14,9 @@ from scipy.interpolate import CubicSpline
 from pathlib import Path
 
 from ..constants import POWER_SPEC_FN
-from ..common import timer
+# from ..common import timer
 
 π = np.pi
-# break points for the spehrical bessel functions; 
-# seems that the first few are enough
-# j0_zeros = [3.141593, 6.283185, 9.424778, 12.566371, 15.707963]
-# j1_zeros = [4.493409, 7.725252, 10.904122, 14.066194, 17.220755]
-# TODO: get the zeros up to 1000
 
 j0 = lambda x: np.sin(x) / x
 dj0_dz = lambda x: np.cos(x) / x - np.sin(x) / x**2
@@ -76,7 +71,7 @@ class ParaClass:
         ul = np.amax(p)
         # limit for subinteval: must be (much) larger than number of breakt points
         Σ = quad(f, 0, ul, limit=p.shape[0]*20, points=p, epsrel=1e-5)
-        print(Σ)
+        # print(Σ)
         return Σ[0]
         # TODO: potential optimization (currect ~1s per variance)
         # a wrapper function to breakt down the entire integral according to break points
@@ -97,10 +92,10 @@ class ParaClass:
         roots = np.roots(coeff)  # find which C_l <=> m = 0
         C_l_min = roots[1]  # this is the 'smaller' root
         # in this range, f(m) is bijective
-        print("C_l ∈", "(", C_l_min, self.C_l_max, ")")
+        # print("C_l ∈", "(", C_l_min, self.C_l_max, ")")
         m_min = self.get_m_from_C_l(C_l_min)
         m_max = self.get_m_from_C_l(self.C_l_max)
-        print("m ∈", "(", m_min, m_max, ") M_H")
+        # print("m ∈", "(", m_min, m_max, ") M_H")
         return m_min, m_max
 
     # @timer
@@ -190,14 +185,14 @@ class ParaClassMod(ParaClass):
     using numerical power spectrum
     k_star_r
     '''
-    def __init__(self, Z, dn):
+    def __init__(self, k, P, Z, dn):
         """
         the same constructor as the parent, except the additional function
         to store the fn of power spectrum from MS equation
         """
-        fn = join(dn, POWER_SPEC_FN)
-        k, P = pickle.load(open(fn, "rb"))
-        k, P = _rm_invalid(k, P)
+        # fn = join(dn, POWER_SPEC_FN)
+        # k, P = pickle.load(open(fn, "rb"))
+        # k, P = _rm_invalid(k, P)
         self._P = P
         self._k = k
 
@@ -227,7 +222,7 @@ class ParaClassMod(ParaClass):
         delattr(self, "Δ")
 
         print("Class instantiated.")
-        print(f"k_*={k_star}, k_*_r={k_star_r}, K={K}, C_c={C_c}, Z={Z}, XX={self.XX}, XY={self.XY}, YY={self.YY}")
+        print(f"k_*={k_star:.2e}, k_*_r={k_star_r}, K={K}, C_c={C_c}, Z={Z:.2e}, XX={self.XX:.2e}, XY={self.XY:.2e}, YY={self.YY:.2e}")
 
     def _get_power_G(self, x):
         """

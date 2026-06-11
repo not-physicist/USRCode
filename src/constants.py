@@ -12,12 +12,18 @@ STEP_SIZE_MODELCLASS = 1e-2
 SOLVER_MODELCLASS = 'DOP853'
 
 # solving inflaton EOM requires such small step size, for the USR phase likely
-STEP_SIZE_EOM = 2e-3
+# larger than 1e-3: P_max(ΔN) becomes wiggly
+# now 5e-4: P_max and f_tot are very sensitive to ΔN; often need to do ~1e-4 increments in ΔN to find the right P_max and f_tot
+STEP_SIZE_EOM = 1e-3
+# STEP_SIZE_EOM_USR = 1e-5
 SOLVER_EOM = "DOP853" 
 
 # solving MS equations: 1e-2 seems a bit too large, need smaller for nice plots
-STEP_SIZE_MS = 5e-3
+STEP_SIZE_MS = 1e-3
 SOLVER_MS = 'DOP853'
+
+# k/k_i at P = P_max
+PEAK_K = 3.17267082
 
 MODEL_CACHE_FN = "model.pkl"
 

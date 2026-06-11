@@ -7,7 +7,7 @@ import scienceplots
 plt.style.use("science")
 
 from ..constants import STEP_SIZE_EOM, SOLVER_EOM
-from ..common import timer
+# from ..common import timer
 
 def _get_H2(ϕ, dϕ, _V):
     return _V(ϕ) / (3 - dϕ**2/2)
@@ -108,7 +108,11 @@ def get_eternal(ϕ, dϕ, _V):
     x = np.amin(np.abs(2*np.pi*dϕ / np.sqrt(H2)))
     # print("dϕ/H = ", x)
     if x <= 1:
-        raise Exception("ETERNAL INFLATION!!!!!")
+        raise RuntimeError("ETERNAL INFLATION!!!!!")
+
+# TODO: need to split the EOM solving into three parts 
+# have to set very small step size for USR
+# Not sure if necessary
 
 # @timer
 def solve_eom(model, toplot=False):
