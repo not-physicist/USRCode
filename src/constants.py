@@ -15,9 +15,9 @@ SOLVER_MODELCLASS = 'DOP853'
 # solving inflaton EOM requires such small step size, for the USR phase likely
 # larger than 1e-3: P_max(ΔN) becomes wiggly
 # now 5e-4: P_max and f_tot are very sensitive to ΔN; often need to do ~1e-4 increments in ΔN to find the right P_max and f_tot
-# STEP_SIZE_EOM = 1e-3
+STEP_SIZE_EOM = 1e-3
 # STEP_SIZE_EOM_USR = 1e-5
-# SOLVER_EOM = "DOP853" 
+SOLVER_EOM = "DOP853" 
 
 EOM_PHI_E_RTOL = 1e-5
 

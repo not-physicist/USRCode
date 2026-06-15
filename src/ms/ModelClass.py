@@ -97,7 +97,7 @@ def get_V0(x, ϵ, η):
     return AR * 24 * np.pi**2 * get_ϵ_cmb(x, ϵ, η)
 
 # @timer
-def solve_SR1(ϵ, η, V0, ϕ_cmb_i):
+def solve_SR1(ϵ, η, V0, ϕ_cmb_i, step):
     """
     solve the first SR stage: 
         t = N - N_cmb; y = (ϕ - ϕᵢ, π, a)
@@ -112,7 +112,7 @@ def solve_SR1(ϵ, η, V0, ϕ_cmb_i):
     # print("Initial conditions SR1 ModelClass: ", inits)
 
     sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), tspan, inits,
-                    events=get_ϕi, method=SOLVER_MODELCLASS, max_step=STEP_SIZE_MODELCLASS*10)    
+                    events=get_ϕi, method=SOLVER_MODELCLASS, max_step=step)    
 
     if sol.status == 1:
         return sol
@@ -125,7 +125,7 @@ def solve_SR1(ϵ, η, V0, ϕ_cmb_i):
 # USR phase 
 
 # @timer
-def solve_USR(V0, ΔN, πᵢ):
+def solve_USR(V0, ΔN, πᵢ, step):
     """
     numerically solve USR to get Δphi from V0 and ΔN
     Note Δϕ is defined to be positive
@@ -138,7 +138,7 @@ def solve_USR(V0, ΔN, πᵢ):
     get_term.terminal = True
     _V = lambda x: V0 
     _dV = lambda x: 0.0
-    sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), tspan, initials, events=get_term, method=SOLVER_MODELCLASS, max_step=STEP_SIZE_MODELCLASS/10)
+    sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), tspan, initials, events=get_term, method=SOLVER_MODELCLASS, max_step=step)
 
     if sol.status == 1:
         # check analytical results
@@ -166,7 +166,7 @@ def get_dV2(x, β, phi_e, V0):
         return dV * V0
 
 # @timer
-def solve_SR2(β, ϕₑ, πₑ, V0):
+def solve_SR2(β, ϕₑ, πₑ, V0, step):
     """
     By solving the EOM of inflaton to determine the number of e-fold in the 2nd SR phase
         t = N - N_e; y = (ϕ - ϕₑ, π, a)
@@ -181,7 +181,7 @@ def solve_SR2(β, ϕₑ, πₑ, V0):
     _V = lambda x: get_V2(x, β, ϕₑ, V0)
     _dV = lambda x: get_dV2(x, β, ϕₑ, V0)
     sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), 
-                            trange, initials, events=get_e1, max_step=STEP_SIZE_MODELCLASS*10, method=SOLVER_MODELCLASS)
+                            trange, initials, events=get_e1, max_step=step, method=SOLVER_MODELCLASS)
     # Since this part (within the root finding) can be quite time consuming,
     # make the step size larger, PS seems fine 
 
@@ -196,13 +196,13 @@ def solve_SR2(β, ϕₑ, πₑ, V0):
         return np.nan
 
 # @timer
-def get_ϕₑ(β, πₑ, V0, N2):
+def get_ϕₑ(β, πₑ, V0, N2, step):
     """
     vary ϕₑ to get the desired N2
     """
     # print("N2 =", get_N2(β, 10.0, πₑ, self.V0))
     def _f(x):
-        sol = solve_SR2(β, x, πₑ, V0)
+        sol = solve_SR2(β, x, πₑ, V0, step)
         if sol is np.nan:
             return np.inf
         else:
@@ -221,7 +221,12 @@ class USRManuel():
     class for SR-USR-SR potential, modified from the orignal suggested by Manuel
     Δϕ computed from ΔN is not good, need to numerically compute this
     """
-    def __init__(self, ϵ, β, N2, ΔN, dn, silent=False):
+    def __init__(self, ϵ, β, N2, ΔN, dn, silent=False, fast=False):
+        """
+        ϵ, β, N2, ΔN: parameters for the potential 
+        silent: if put useful diagnostics to stdout 
+        fast: fast excution, the sol_full should not be trusted
+        """
 
         if not silent:
             print(150*"=")
@@ -233,6 +238,11 @@ class USRManuel():
         
         if dn is not None:
             Path(dn).mkdir(parents=True, exist_ok=True)
+         
+        if fast:
+            stepsize = STEP_SIZE_MODELCLASS * 10
+        else:
+            stepsize = STEP_SIZE_MODELCLASS
 
         self.ϵ = ϵ 
         self.β = β
@@ -259,7 +269,7 @@ class USRManuel():
             raise ValueError("CMB tensor-to-scalar ratio bound breached: r =", r)
 
         self.π_cmb = -np.sqrt(2*ϵ_CMB)
-        sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i)
+        sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i, stepsize*10)
         self.πᵢ = sol1.y[1][-1]
         # get_ϕcmb_η() is not very accurate (use SR approximation) 
         # the exact N1 is not self.N1
@@ -269,14 +279,14 @@ class USRManuel():
 
         # USR phase 
         # self.Δϕ, self.πₑ = get_Δϕ_πe(self.V0, self.ΔN, self.πᵢ)
-        sol2 = solve_USR(self.V0, self.ΔN, self.πᵢ)
+        sol2 = solve_USR(self.V0, self.ΔN, self.πᵢ, stepsize/10)
         self.Δϕ = -sol2.y[0, -1]
         self.πₑ = sol2.y[1, -1]
         # print(self.πᵢ, self.πₑ)
         # print("ΔN from ModelClass.py solver: ", sol2.t[-1])
 
         # 2nd SR phase
-        self.ϕₑ = get_ϕₑ(self.β, self.πₑ, self.V0, self.N2)
+        self.ϕₑ = get_ϕₑ(self.β, self.πₑ, self.V0, self.N2, stepsize*10)
         self.ϕᵢ = self.ϕₑ + self.Δϕ 
         self.ϕ_cmb = self.ϕ_cmb_i + self.ϕᵢ
 
@@ -287,7 +297,7 @@ class USRManuel():
         self.h = 6 * np.sqrt(2*self.ϵ2) / self.πₑ
         
         # stitched up solutions to get the "full solution"
-        sol3 = solve_SR2(self.β, self.ϕₑ, self.πₑ, self.V0)
+        sol3 = solve_SR2(self.β, self.ϕₑ, self.πₑ, self.V0, stepsize*10)
         # print("N2 from ModelClass.py: ", sol3.t[-1])
         self.sol_full = self.get_sol_full(sol1, sol2, sol3)
 
