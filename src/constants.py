@@ -7,16 +7,19 @@ import psutil
 NUM_THREADS = psutil.cpu_count()
 
 # step size for ODE solvers; in H^-1 or num of efolds
-STEP_SIZE_MODELCLASS = 1e-2
+STEP_SIZE_MODELCLASS = 1e-4
 # STEP_SIZE_MODELCLASS = 2e-3
 SOLVER_MODELCLASS = 'DOP853'
 
+# not needed now
 # solving inflaton EOM requires such small step size, for the USR phase likely
 # larger than 1e-3: P_max(ΔN) becomes wiggly
 # now 5e-4: P_max and f_tot are very sensitive to ΔN; often need to do ~1e-4 increments in ΔN to find the right P_max and f_tot
-STEP_SIZE_EOM = 1e-3
+# STEP_SIZE_EOM = 1e-3
 # STEP_SIZE_EOM_USR = 1e-5
-SOLVER_EOM = "DOP853" 
+# SOLVER_EOM = "DOP853" 
+
+EOM_PHI_E_RTOL = 1e-5
 
 # solving MS equations: 1e-2 seems a bit too large, need smaller for nice plots
 STEP_SIZE_MS = 1e-3

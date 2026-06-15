@@ -5,6 +5,7 @@ from matplotlib import cm
 from scipy.integrate import cumulative_trapezoid, solve_ivp
 from scipy.interpolate import CubicSpline 
 import tqdm
+from os.path import join
 
 # from multiprocessing import Pool
 from pathos.multiprocessing import ProcessingPool as Pool
@@ -25,8 +26,15 @@ def get_ms_quant(model, sol):
     # print(sol)
     N, ϕ, π = sol
     # print(N)
-    a = np.exp(N - N[0])
+    
+    # Check dimension of three arrays 
+    # print(N.shape, ϕ.shape, π.shape)
+    # Check duplicate in the sol
+    _, c = np.unique(N, return_counts=True)
+    if (c[c>1]).shape[0] > 0:
+        print("WARNING: duplcate element in EOM solution!")
 
+    a = np.exp(N - N[0])
     H = np.sqrt(model.get_V(ϕ) / (3 - π**2/2))
     dϕdt = π * H
     t = cumulative_trapezoid(1/H, N - N[0])
@@ -37,7 +45,7 @@ def get_ms_quant(model, sol):
     # return N, ϕ, dϕdN, a, H, dϕdt, t, z, dzdt_z
     return t, a, H, z, dzdt_z, ϕ
 
-def plot_z(model, sol):
+def plot_z(model, sol, fn="z.pdf"):
     N, ϕ, π = sol
     t, a, H, z, dzdt_z, ϕ = get_ms_quant(model, sol)
 
@@ -50,9 +58,10 @@ def plot_z(model, sol):
     ax.plot(N[:-3], np.abs(ddz_z)/(a*H)[:-3]**2, c="k")
 
     ax.set_yscale("log")
-
-    plt.savefig(model.dn + "z.pdf", bbox_inches="tight")
-    plt.close()
+    
+    fn_full = join(model.dn, fn)
+    plt.savefig(fn_full, bbox_inches="tight")
+    plt.close(fig)
 
 def find_time(t, k_aH, X):
     """
@@ -184,7 +193,7 @@ def plot_power_evolution(model, sol):
 
     for i, ki in enumerate(k):
         # print(f"k/aH_i = {ki}, k/aH_e = {ki*aH_i/aH_e}")
-        sol_t, P = solve_ms_single(ki*aH_i, t, a, H, z, dzdt_z, True)
+        sol_t, P = solve_ms_single(ki*aH_i, t, a, H, z, dzdt_z, aH_i, evo=True)
         # print(sol_t, P)
         sol_N = np.interp(sol_t, t, N[:-1])
         c = cmap(i/(len(k)-1))

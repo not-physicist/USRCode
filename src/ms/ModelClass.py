@@ -8,7 +8,8 @@ import pickle
 # from . import EOM
 # from .EOM import _get_f
 from .EOM import _get_f
-from ..constants import STEP_SIZE_MODELCLASS, SOLVER_MODELCLASS, MODEL_CACHE_FN
+from ..constants import STEP_SIZE_MODELCLASS, SOLVER_MODELCLASS, MODEL_CACHE_FN, EOM_PHI_E_RTOL
+from ..common import timer
 
 ns = 0.974 
 AR = 2.1e-9
@@ -26,6 +27,7 @@ def get_V1(x, ϵ, η, V0):
 def get_dV1(x, ϵ, η, V0):
     return V0 * (np.sqrt(2*ϵ) + η*x)
 
+# slow-roll parameters at cmb scale (not to be confused with the ϵ and η parameters in the potential)
 def get_ϵV1(x, ϵ, η):
     return 1/2 * ((np.sqrt(2*ϵ) + η*x)/(1 + np.sqrt(2*ϵ)*x + η/2*x**2))**2
 
@@ -53,12 +55,13 @@ def get_Np(x, ϵ, η):
     return Np
 
 
-# TODO: maybe improve this 
-# if the initial ϕ_cmb is not chosen well, could easy get stuck in the wrong minimum
 def get_ϕcmb_η(ϵ, Np):
     """
     use root finding alg. to find (ϕ_cmb - ϕ_i)/mpl and η at the same time 
     ns is fixed, inputs are ϵ and N_+
+
+    Note that the ϕcmb and η from this are not very accurate.
+    It could cause problems for the full solution
     """
 
     def get_f(x):
@@ -93,12 +96,12 @@ def get_V0(x, ϵ, η):
     """
     return AR * 24 * np.pi**2 * get_ϵ_cmb(x, ϵ, η)
 
+# @timer
 def solve_SR1(ϵ, η, V0, ϕ_cmb_i):
     """
     solve the first SR stage: 
         t = N - N_cmb; y = (ϕ - ϕᵢ, π, a)
     """
-    # print(ϵ, η)
     _V = lambda x: get_V1(x, ϵ, η, V0)
     _dV = lambda x: get_dV1(x, ϵ, η, V0)
     tspan = [0, 100]
@@ -106,11 +109,11 @@ def solve_SR1(ϵ, η, V0, ϕ_cmb_i):
     get_ϕi.terminal = True
     π_cmb = -np.sqrt(2*get_ϵV1(ϕ_cmb_i, ϵ, η))
     inits = [ϕ_cmb_i, π_cmb, 1.0]
-    # print(π_cmb)
+    # print("Initial conditions SR1 ModelClass: ", inits)
 
     sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), tspan, inits,
-                    events=get_ϕi, method=SOLVER_MODELCLASS, max_step=STEP_SIZE_MODELCLASS)
-    
+                    events=get_ϕi, method=SOLVER_MODELCLASS, max_step=STEP_SIZE_MODELCLASS*10)    
+
     if sol.status == 1:
         return sol
     else:
@@ -121,6 +124,7 @@ def solve_SR1(ϵ, η, V0, ϕ_cmb_i):
 ####################################################################################### 
 # USR phase 
 
+# @timer
 def solve_USR(V0, ΔN, πᵢ):
     """
     numerically solve USR to get Δphi from V0 and ΔN
@@ -146,8 +150,7 @@ def solve_USR(V0, ΔN, πᵢ):
     else:
         # print(sol.t)
         # print(sol.y[1])
-        print("Failure in solving USR!")
-        raise ValueError
+        raise RuntimeError("Failure in solving USR!")
 
 ####################################################################################### 
 # second SR phase
@@ -162,6 +165,7 @@ def get_dV2(x, β, phi_e, V0):
         dV = 6/(1+2*β) * x/phi_e**2 * (1 - (1-β)*x/phi_e)
         return dV * V0
 
+# @timer
 def solve_SR2(β, ϕₑ, πₑ, V0):
     """
     By solving the EOM of inflaton to determine the number of e-fold in the 2nd SR phase
@@ -177,7 +181,9 @@ def solve_SR2(β, ϕₑ, πₑ, V0):
     _V = lambda x: get_V2(x, β, ϕₑ, V0)
     _dV = lambda x: get_dV2(x, β, ϕₑ, V0)
     sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), 
-                            trange, initials, events=get_e1, max_step=STEP_SIZE_MODELCLASS, method=SOLVER_MODELCLASS)
+                            trange, initials, events=get_e1, max_step=STEP_SIZE_MODELCLASS*10, method=SOLVER_MODELCLASS)
+    # Since this part (within the root finding) can be quite time consuming,
+    # make the step size larger, PS seems fine 
 
     if sol.status == 1:
         return sol
@@ -189,6 +195,7 @@ def solve_SR2(β, ϕₑ, πₑ, V0):
         # if it reached the end, it simply means that the ϕₑ is not correct
         return np.nan
 
+# @timer
 def get_ϕₑ(β, πₑ, V0, N2):
     """
     vary ϕₑ to get the desired N2
@@ -201,7 +208,7 @@ def get_ϕₑ(β, πₑ, V0, N2):
         else:
             return sol.t[-1] - N2
 
-    sol = optimize.root_scalar(_f, bracket=[1, 10], method='bisect', rtol=1e-3)
+    sol = optimize.root_scalar(_f, bracket=[1, 10], method='brentq', rtol=EOM_PHI_E_RTOL)
 
     if sol.converged:
         return sol.root 
@@ -230,6 +237,7 @@ class USRManuel():
         self.ϵ = ϵ 
         self.β = β
         # N_tot is really the N_tot of SR inflation
+        # self.N1 is not the "accurate" N1 !
         self.N1 = N_tot - N2
         self.N2 = N2
         self.ΔN = ΔN
@@ -241,9 +249,8 @@ class USRManuel():
         self.V0 = get_V0(self.ϕ_cmb_i, self.ϵ, self.η)
         # the SR approximation at cmb scale
         ϵ_CMB = get_ϵV1(self.ϕ_cmb_i, self.ϵ, self.η)
-        η_CMB = get_ηV1(self.ϕ_cmb_i, self.ϵ, self.η)
+        # η_CMB = get_ηV1(self.ϕ_cmb_i, self.ϵ, self.η)
         # print("SR parameters at CMB scale: ", ϵ_CMB, η_CMB)
-        self.π_cmb = -np.sqrt(2*ϵ_CMB)
         
         # check the tensor-to-scalar ratio at CMB scale 
         r = 16 * ϵ_CMB 
@@ -251,9 +258,14 @@ class USRManuel():
         if r > 0.056:
             raise ValueError("CMB tensor-to-scalar ratio bound breached: r =", r)
 
+        self.π_cmb = -np.sqrt(2*ϵ_CMB)
         sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i)
         self.πᵢ = sol1.y[1][-1]
-        # print(-np.sqrt(2*self.ϵ), self.πᵢ)
+        # get_ϕcmb_η() is not very accurate (use SR approximation) 
+        # the exact N1 is not self.N1
+        self.N1_exact = sol1.t[-1]
+        # print("N1 from ModelClass.py", sol1.t[-1])
+        # print("ϕ_cmb_i from solve_SR1(): ", sol1.y[0][0])
 
         # USR phase 
         # self.Δϕ, self.πₑ = get_Δϕ_πe(self.V0, self.ΔN, self.πᵢ)
@@ -261,13 +273,12 @@ class USRManuel():
         self.Δϕ = -sol2.y[0, -1]
         self.πₑ = sol2.y[1, -1]
         # print(self.πᵢ, self.πₑ)
+        # print("ΔN from ModelClass.py solver: ", sol2.t[-1])
 
         # 2nd SR phase
         self.ϕₑ = get_ϕₑ(self.β, self.πₑ, self.V0, self.N2)
         self.ϕᵢ = self.ϕₑ + self.Δϕ 
         self.ϕ_cmb = self.ϕ_cmb_i + self.ϕᵢ
-
-        t1 = perf_counter()
 
         # auxiliary quantities 
         # self.h = - 18*np.sqrt(2)/np.sqrt(self.ϵ)*np.exp(3*ΔN)*self.β/self.ϕₑ 
@@ -275,9 +286,12 @@ class USRManuel():
         self.η2 = 6 / self.ϕₑ**2 * (2*self.β - 1) / (1 + 2*self.β)
         self.h = 6 * np.sqrt(2*self.ϵ2) / self.πₑ
         
-        # sol3 = solve_SR2(self.β, self.ϕₑ, self.πₑ, self.V0)
-        # self.sol_full = self.get_sol_full(sol1, sol2, sol3)
+        # stitched up solutions to get the "full solution"
+        sol3 = solve_SR2(self.β, self.ϕₑ, self.πₑ, self.V0)
+        # print("N2 from ModelClass.py: ", sol3.t[-1])
+        self.sol_full = self.get_sol_full(sol1, sol2, sol3)
 
+        t1 = perf_counter()
         if not silent:
             print("Class initiated:", vars(self))
             print("Initiation took %.2f s" % (t1 - t0))
@@ -309,9 +323,9 @@ class USRManuel():
     def get_sol_full(self, sol1, sol2, sol3):
         """
         to construct the full sol object from three sol's
-        this seems very bad, (the power spectrum from this
+        this seems very bad, (the power spectrum from this is not good)
         """
-        N = np.append(sol1.t - sol1.t[-1] - sol2.t[-1], np.append(sol2.t-sol2.t[-1], sol3.t))
-        ϕ = np.append(sol1.y[0] + self.Δϕ + self.ϕₑ, np.append(sol2.y[0] + self.ϕₑ + self.Δϕ, sol3.y[0]))
-        π = np.append(sol1.y[1], np.append(sol2.y[1], sol3.y[1]))
+        N = np.append(sol1.t[:-1] - sol1.t[-1] - sol2.t[-1], np.append(sol2.t[:-1] - sol2.t[-1], sol3.t))
+        ϕ = np.append(sol1.y[0][:-1] + self.Δϕ + self.ϕₑ, np.append(sol2.y[0][:-1] + self.ϕₑ + self.Δϕ, sol3.y[0]))
+        π = np.append(sol1.y[1][:-1], np.append(sol2.y[1][:-1], sol3.y[1]))
         return N, ϕ, π

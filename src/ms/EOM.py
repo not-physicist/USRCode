@@ -1,3 +1,7 @@
+"""
+Now defunct. The EOM solution is handled directly in ModelClass.py
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from time import perf_counter
@@ -128,13 +132,14 @@ def solve_eom(model, toplot=False):
     get_e1.terminal = True
     # π_cmb = -np.sqrt(2*get_ϵV1(model.ϕ_cmb_i, model.ϵ, model.η))
     initials = [model.ϕ_cmb, model.π_cmb, 1.0]
+    # print("Intial conditions EOM.py: ", initials)
 
-    # sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), tspan, initials, events=get_e1, rtol=1e-12)
     sol = solve_ivp(lambda t, y: _get_f(t, y, _V, _dV), tspan, initials, events=get_e1, method=SOLVER_EOM, max_step=STEP_SIZE_EOM)
     t1 = perf_counter()
 
     if sol.status == 1:
         N_e = np.interp(model.ϕₑ, sol.y[0][::-1], sol.t[::-1])
+        # N_e = model.N1_exact + model.ΔN
 
         get_eternal(sol.y[0], sol.y[1], _V)
        
