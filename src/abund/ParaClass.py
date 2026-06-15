@@ -221,8 +221,8 @@ class ParaClassMod(ParaClass):
         delattr(self, "A")
         delattr(self, "Δ")
 
-        print("Class instantiated.")
-        print(f"k_*={k_star:.2e}, k_*_r={k_star_r}, K={K}, C_c={C_c}, Z={Z:.2e}, XX={self.XX:.2e}, XY={self.XY:.2e}, YY={self.YY:.2e}")
+        # print("Class instantiated.")
+        # print(f"k_*={k_star:.2e}, k_*_r={k_star_r}, K={K}, C_c={C_c}, Z={Z:.2e}, XX={self.XX:.2e}, XY={self.XY:.2e}, YY={self.YY:.2e}")
 
     def _get_power_G(self, x):
         """

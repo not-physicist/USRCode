@@ -35,7 +35,7 @@ def compute_single(model, GetP=False, GetF=False):
     """
     k, P = ms.save_solve_all(model, False, N_ms=250, log_k_min=-1, log_k_max=3, force_new=True, tosave=False)
     Pmax = np.amax(P)
-    print(f"P_max = {Pmax}")
+    # print(f"P_max = {Pmax}")
 
     if GetP:
         return k, P
@@ -48,7 +48,7 @@ def compute_single(model, GetP=False, GetF=False):
     # TODO: compute the GW singals
 
 
-@timer
+# @timer
 def fix_h(ϵ, N2, ΔN, h_desired):
     """
     get the appropriate β to achieve desired h
@@ -61,7 +61,7 @@ def fix_h(ϵ, N2, ΔN, h_desired):
     # use the scaling to get a better guess 
     βi2 = βi * h_desired/model.h
     
-    sol, fo = toms748(lambda x: USRManuel(ϵ, x, N2, ΔN, None, silent=True).h - h_desired, 
+    sol, fo = toms748(lambda x: USRManuel(ϵ, x, N2, ΔN, None, silent=True, fast=True).h - h_desired, 
                       βi2*0.5, βi2*1.5, rtol=1e-5,
                       full_output=True, disp=True)
     # print(fo)
@@ -69,4 +69,4 @@ def fix_h(ϵ, N2, ΔN, h_desired):
     return USRManuel(ϵ, sol, N2, ΔN, None, silent=True)
 
 if __name__ == "__main__":
-    print(fix_h(1e-4, 25, 2.8, -20))
+    print(fix_h(1e-4, 20, 2.2, -20))
