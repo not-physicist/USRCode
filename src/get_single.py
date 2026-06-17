@@ -1,14 +1,17 @@
 from scipy.optimize import toms748
 import numpy as np
 from scipy.integrate import simpson
+from os.path import join
+import pickle
 
 from src.abund.ParaClass import ParaClassMod
 from . import ms
 from .ms import USRManuel
-from .common import get_Z, get_M_H, get_zero, timer
-from .constants import PEAK_K
+from .common import get_Z, get_M_H, get_zero, timer, get_f_gw
+from .constants import PEAK_K, MODEL_CACHE_FN, POWER_SPEC_FN
 from . import abund
 from .abund import USR_full
+from . import gw
 
 
 def get_f(model, k, P):
@@ -17,7 +20,8 @@ def get_f(model, k, P):
 
     # m in M_H
     m = np.logspace(-3, np.log10(para.m_max), 1000, base=10)[:-1]  # last element gives NaN C_l
-    M_H = get_M_H(model.V0, model.N2)  # in M_\odot
+    M_H = get_M_H(model.V0, model.N2+model.ΔN)  # M_H(k_i) in M_\odot
+    M_H *= PEAK_K**(-2)
     # print("M_H = ", M_H)
     f = abund.get_f(m, para, lambda x: USR_full.get_J_1(x, model.η2, model.h), get_zero)
 
@@ -68,5 +72,16 @@ def fix_h(ϵ, N2, ΔN, h_desired):
     print(f"Found the right β for h = {h_desired}: β = {sol}")
     return USRManuel(ϵ, sol, N2, ΔN, None, silent=True)
 
-if __name__ == "__main__":
-    print(fix_h(1e-4, 20, 2.2, -20))
+
+def get_Ω(dn):
+    with open(join(dn, MODEL_CACHE_FN), "rb") as f:
+        model = pickle.load(f)
+
+    with np.load(join(dn, POWER_SPEC_FN)) as data:
+        k = data["k"]
+        P = data["P"]
+
+    Ω = gw.get_Ω(k, P)
+    f_i = get_f_gw(model.V0, model.N2+model.ΔN)
+    f = f_i * k
+    return f, Ω

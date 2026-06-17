@@ -27,6 +27,7 @@ b = 0
 # assume SM degrees of freedom
 c_g = 0.4
 Ωr0 = 1.62e-5
+h = 0.67
 
 '''
 def _get_y(u, v):
@@ -157,12 +158,12 @@ def _get_Ω_rh(k: float, P: Callable) -> float:
 
     return Ω1 + Ω2
 
-def get_Ω(dn, toplot=False):
+def get_Ω(k, P):
     """
     current day GW energy parameter 
     use multiprocessing to compute various k's
     """
-    k, P = pickle.load(open(dn + "PS.dat", "rb"))
+    # k, P = pickle.load(open(dn + "PS.dat", "rb"))
 
     if k.shape != P.shape:
         raise IndexError("Inputs (k and P) are of different dimension!")
@@ -178,7 +179,7 @@ def get_Ω(dn, toplot=False):
             return 0.0
 
     def _get_Ω(x):
-        return c_g * Ωr0 *_get_Ω_rh(x, get_P) 
+        return c_g * Ωr0 *_get_Ω_rh(x, get_P) * h**2
 
     with Pool(processes=NUM_THREADS) as pool:
         Ω = np.array(list(tqdm(pool.imap(_get_Ω, k), total=len(k))))

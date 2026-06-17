@@ -29,7 +29,7 @@ SOLVER_MS = 'DOP853'
 # k/k_i at P = P_max
 PEAK_K = 3.29297126
 # actually, it probably dones't matter if PEAK_K is accurate 
-# as long as it is used consistently for all interpolation
+# as long as it is used consistently for all interpolations
 
 MODEL_CACHE_FN = "model.pkl"
 

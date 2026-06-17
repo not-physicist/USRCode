@@ -14,14 +14,15 @@ from .ms import USRManuel, get_P_max
 from .common import get_Z, get_M_H, get_zero
 from .abund import USR_full, get_f
 from. import get_single
-from .constants import NUM_THREADS, POWER_SPEC_FN, BH_F_FN, PEAK_K
+from .constants import NUM_THREADS, POWER_SPEC_FN, BH_F_FN, PEAK_K, MODEL_CACHE_FN
 
 import scienceplots
 plt.style.use("science")
 
 PBH_CONST_DN = "data/PBHbounds/bounds"
 PBH_CONST_LIST = ["Evaporation.txt", "EROS.txt", "HSC.txt", "K.txt", "M.txt", "CMB.txt"]
-PBH_CONST_COORD = [[1e-18, 1e-3], [1e-4, 2e-2], [1e-10, 3e-3], [2e-10, 5e-1], [1e-2, 5e-1], [1e2, 1e-3]]
+PBH_CONST_COORD = [[2e-18, 1e-1], [2e-4, 2.2e-2], [3e-10, 3e-2], [2e-10, 5e-1], [2e-2, 5e-1], [1e2, 1e-3]]
+PBH_CONST_ROT = [-90, 0, -90, 0, 0, -90]
 PBH_CONST_ENVL_FN = "data/PBHbounds_all.pkl"
 
 DELTA_N_RTOL = 1e-7
@@ -80,9 +81,9 @@ def plot_constraints(ax):
         fn = join(PBH_CONST_DN, PBH_CONST_LIST[i])
         mi, fi = np.loadtxt(fn).T
         ax.plot(mi, fi, c="k")
-        ax.text(*PBH_CONST_COORD[i], PBH_CONST_LIST[i].replace(".txt", ""), va="center_baseline")
+        ax.text(*PBH_CONST_COORD[i], PBH_CONST_LIST[i].replace(".txt", ""), va="center_baseline", rotation=PBH_CONST_ROT[i])
 
-    ax.fill_between(ax.get_xlim(), 1, 1000, color="gray", alpha=0.3, linewidth=0.0)
+    ax.fill_between([1e-20, 1e5], 1, 1000, color="gray", alpha=0.3, linewidth=0.0)
 
 
 def find_entire_DM(ϵ, N2, h_desired, dn=None):
@@ -147,6 +148,7 @@ def find_entire_DM(ϵ, N2, h_desired, dn=None):
         return np.log(ftot)
 
     sol, fo = toms748(_f, ΔN_all[0], ΔN_all[-1], rtol=DELTA_N_RTOL, full_output=True, disp=True)
+    model = get_single.fix_h(ϵ, N2, sol, h_desired)
 
     ######################################################
     # now the "correct" ΔN has been found 
@@ -172,6 +174,9 @@ def find_entire_DM(ϵ, N2, h_desired, dn=None):
 
         np.savez(join(dn, POWER_SPEC_FN), k=k, P=P)
         np.savez(join(dn, BH_F_FN), m=m, f=f)
+
+        with open(join(dn, MODEL_CACHE_FN), "wb") as f:
+            pickle.dump(model, f)
 
     return m, f
 
@@ -212,7 +217,7 @@ def find_N2_window(ϵ, h_desired, bracket, dn):
 
 def find_N2_window_all(ϵ, ax=None):
     h_all = [-20]
-    approx_N2 = [[20, 25]]
+    approx_N2 = [[18, 23]]
 
     for i in range(0, len(h_all)):
         bracket1 = [approx_N2[i][0] - 1, approx_N2[i][0] + 1]
@@ -238,18 +243,18 @@ def plot_mass_func():
     ax.set_yscale("log")
     ax.set_xlabel(r"$M/M_\odot$")
     ax.set_ylabel(r"$f_\text{PBH}$")
+    ax.set_xlim(1e-18, 1e4)
     ax.set_ylim((1e-4, 3))
 
     fn = join(FIND_N2_DN, "f_PBH.pdf") 
     plt.savefig(fn, bbox_inches="tight")
     plt.close(fig)
 
-
 if __name__ == "__main__":
     # model = USRManuel(1e-4, 3.351912804219496e-05 , 19.961953829161633, 2.2, 'tmp/')
     # ms.save_solve_all(model, toplot=True)
     
-    find_N2_window_all(1e-4)
+    # find_N2_window_all(1e-4)
 
     # h = -20: [19.959870481923993, 24.74341529302672]
-    # plot_mass_func()
+    plot_mass_func()
