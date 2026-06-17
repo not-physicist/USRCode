@@ -34,7 +34,7 @@ def compute_single(model, GetP=False, GetF=False):
     GetPmax and GetF are two options, if true tehy will terminate the evaluation
     """
     k, P = ms.save_solve_all(model, False, N_ms=250, log_k_min=-1, log_k_max=3, force_new=True, tosave=False)
-    Pmax = np.amax(P)
+    # Pmax = np.amax(P)
     # print(f"P_max = {Pmax}")
 
     if GetP:
@@ -57,7 +57,7 @@ def fix_h(ϵ, N2, ΔN, h_desired):
 
     # default βs (initial guess)
     βi = 1e-4
-    model = USRManuel(ϵ, βi, N2, ΔN, None, silent=True)
+    model = USRManuel(ϵ, βi, N2, ΔN, None, silent=True, fast=True)
     # use the scaling to get a better guess 
     βi2 = βi * h_desired/model.h
     

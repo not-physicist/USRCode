@@ -320,9 +320,8 @@ if __name__ == "__main__":
     # ms.plot_z(model, sol)
     # ms.plot_power_evolution(model, sol)
 
-    model = USRManuel(1e-4, 1e-5, 25, 1.5, "tmp/")
-    sol = EOM.solve_eom(model, True)
-    compare_EOM(model, sol)
+    # sol = EOM.solve_eom(model, True)
+    # compare_EOM(model, sol)
     # ms.plot_power_evolution(model, model.sol_full)
 
     # plot_USR()

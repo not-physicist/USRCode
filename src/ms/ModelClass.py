@@ -172,8 +172,9 @@ def solve_SR2(β, ϕₑ, πₑ, V0, step):
         t = N - N_e; y = (ϕ - ϕₑ, π, a)
     """
     # print(β, ϕₑ, πₑ, V0)
-
-    trange = [0, 50]
+    
+    # for asteroid mass PBH, N2 <~ 25
+    trange = [0, 30]
     initials = [ϕₑ, πₑ, 1.0]
     
     def get_e1(t, y): return np.abs(y[1]**2/2) - 1
@@ -209,6 +210,7 @@ def get_ϕₑ(β, πₑ, V0, N2, step):
             return sol.t[-1] - N2
 
     sol = optimize.root_scalar(_f, bracket=[1, 10], method='brentq', rtol=EOM_PHI_E_RTOL)
+    # toms748 doesn't like np.inf
 
     if sol.converged:
         return sol.root 
@@ -221,6 +223,7 @@ class USRManuel():
     class for SR-USR-SR potential, modified from the orignal suggested by Manuel
     Δϕ computed from ΔN is not good, need to numerically compute this
     """
+    # @timer
     def __init__(self, ϵ, β, N2, ΔN, dn, silent=False, fast=False):
         """
         ϵ, β, N2, ΔN: parameters for the potential 
@@ -229,7 +232,7 @@ class USRManuel():
         """
 
         if not silent:
-            print(150*"=")
+            print(100*"=")
 
         t0 = perf_counter()
 
@@ -243,6 +246,7 @@ class USRManuel():
             stepsize = STEP_SIZE_MODELCLASS * 10
         else:
             stepsize = STEP_SIZE_MODELCLASS
+        # print(stepsize)
 
         self.ϵ = ϵ 
         self.β = β
@@ -269,7 +273,7 @@ class USRManuel():
             raise ValueError("CMB tensor-to-scalar ratio bound breached: r =", r)
 
         self.π_cmb = -np.sqrt(2*ϵ_CMB)
-        sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i, stepsize*10)
+        sol1 = solve_SR1(self.ϵ, self.η, self.V0, self.ϕ_cmb_i, stepsize)
         self.πᵢ = sol1.y[1][-1]
         # get_ϕcmb_η() is not very accurate (use SR approximation) 
         # the exact N1 is not self.N1

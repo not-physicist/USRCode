@@ -12,7 +12,7 @@ import numpy as np
 
 from ..constants import PEAK_K
 
-def save_solve_all(model, toplot=False, N_ms=200, force_new=False, log_k_min=-3, log_k_max=4, silent=False, tosave=False):
+def save_solve_all(model, toplot=False, N_ms=250, force_new=False, log_k_min=-1, log_k_max=3, silent=False, tosave=False):
     """
     solve the background and compute the power spectrum
     """
@@ -47,7 +47,15 @@ def save_solve_all(model, toplot=False, N_ms=200, force_new=False, log_k_min=-3,
         fn = None
 
     k, P = ms.solve_power_spec(*backgrounds, model.ϕᵢ, plot_fn=fn, num=N_ms, log_k_min=log_k_min, log_k_max=log_k_max, silent=silent)
-    print(f"P_max = {np.amax(P)}")
+
+    index_max = np.array([i for i, j in enumerate(P) if j == np.amax(P)])
+    P_max = np.amax(P)
+    k_max = k[index_max]
+    print(f"P_max = {P_max} at {k_max}")
+    if k_max > 4 or k_max < 2:
+        print("WARNING: the power spectrum might be bad!")
+        print(f"P_max = {P_max}; P(k=3) = {np.interp(3, k, P)}")
+        # it is not so bad if two "maxima" are very close
     
     if tosave:
         # with open(fn_eom, "wb") as f:
@@ -58,6 +66,7 @@ def save_solve_all(model, toplot=False, N_ms=200, force_new=False, log_k_min=-3,
 
     return k, P
 
+# @timer
 def get_P_max(model):
     """
     only get the maximum of the power spectrum. use PEAK_K as the location

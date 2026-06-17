@@ -14,7 +14,7 @@ from .ms import USRManuel, get_P_max
 from .common import get_Z, get_M_H, get_zero
 from .abund import USR_full, get_f
 from. import get_single
-from .constants import NUM_THREADS
+from .constants import NUM_THREADS, POWER_SPEC_FN, BH_F_FN, PEAK_K
 
 import scienceplots
 plt.style.use("science")
@@ -26,6 +26,8 @@ PBH_CONST_ENVL_FN = "data/PBHbounds_all.pkl"
 
 DELTA_N_RTOL = 1e-7
 N2_RTOL = 1e-5
+
+FIND_N2_DN = "find_N2/"
 
 def comp_envelope_all():
     """
@@ -83,7 +85,7 @@ def plot_constraints(ax):
     ax.fill_between(ax.get_xlim(), 1, 1000, color="gray", alpha=0.3, linewidth=0.0)
 
 
-def find_entire_DM(ϵ, N2, h_desired):
+def find_entire_DM(ϵ, N2, h_desired, dn=None):
     """
     find the set of parameter to have f_tot = 1
     """
@@ -101,14 +103,19 @@ def find_entire_DM(ϵ, N2, h_desired):
         Pmax_all = np.array(list(pool.imap(_g, ΔN_all)))
     
     print(ΔN_all, Pmax_all)
-    cs = CubicSpline(ΔN_all, Pmax_all)
-    # print(cs(ΔN_all[0]))
+
+    # actually P_max(ΔN) follows veyr good power law. But spline seems very simple
+    cs = CubicSpline(ΔN_all, Pmax_all, extrapolate=False)
     
     ######################################################
     # compute the full spectrum using ΔN_all[0]
     ######################################################
     model = get_single.fix_h(ϵ, N2, ΔN_all[0], h_desired)
     k, P = get_single.compute_single(model, GetP=True)
+
+    # it seems that changing N2 changes PEAK_K also.
+    # Using the same PEAK_K should be OK
+    P_max_full = CubicSpline(k, P)(PEAK_K)
     
     ######################################################
     # use root finding to find the right ΔN to give f_tot = 1
@@ -118,7 +125,7 @@ def find_entire_DM(ϵ, N2, h_desired):
         need to get the full power specturm from a given ΔN (from interpolation)
         """
         P_max_desired = cs(x)
-        P_new = P / np.amax(P) * P_max_desired
+        P_new = P / P_max_full * P_max_desired
         # print(P_max_desired, np.amax(P), np.amax(P_new))
         return k, P_new
 
@@ -152,10 +159,24 @@ def find_entire_DM(ϵ, N2, h_desired):
     ftot = simpson(f, np.log(m))
     print(f"Found the correct ΔN with ftot={ftot}")
     print(fo)
+
+    log_int = np.log(check_constraint(m, f))
+    print(f"N2 = {N2}, log(integral) = {log_int}")
+    
+    # to save stuff into cache
+    if dn is not None:
+        # if need β and other stuff, run get_single.fix_h()
+        # paras = [ϵ, N2, sol]
+        
+        Path(dn).mkdir(parents=True, exist_ok=True)
+
+        np.savez(join(dn, POWER_SPEC_FN), k=k, P=P)
+        np.savez(join(dn, BH_F_FN), m=m, f=f)
+
     return m, f
 
 
-def find_N2_window(ϵ, h_desired, bracket):
+def find_N2_window(ϵ, h_desired, bracket, dn):
     """
     find the range for N_- 
     so that the mass function sit inside the asteroid window
@@ -165,37 +186,53 @@ def find_N2_window(ϵ, h_desired, bracket):
         print(f"Trying with N2 = {x}")
         m, f = find_entire_DM(ϵ, x, h_desired)
         log_int = np.log(check_constraint(m, f))
-        print(f"N2 = {x}, log(integral) = {log_int}")
+        # print(f"N2 = {x}, log(integral) = {log_int}")
         # ftot exponential sensitive in ΔN; use log for faster convergence
         return log_int
     
-    sol, fo = toms748(_f, *bracket, full_output=True, disp=True, rtol=N2_RTOL)
-    print("Found the right N2!")
-    print(fo)
+    fn_ps = join(dn, POWER_SPEC_FN)
+    fn_bh = join(dn, BH_F_FN)
+    if Path(fn_ps).exists() and Path(fn_bh).exists():
+        print("Found cache files. SKIPPING...")
+        data = np.load(fn_bh)
+        m = data["m"]
+        f = data["f"]
+    else:
+        sol, fo = toms748(_f, *bracket, full_output=True, disp=True, rtol=N2_RTOL)
+        print("Found the right N2!")
+        print(fo)
 
-    # re-compute the mass function 
-    m, f = find_entire_DM(ϵ, sol, h_desired)
+        # re-compute the mass function 
+        m, f = find_entire_DM(ϵ, sol, h_desired, dn)
+        # log_int = np.log(check_constraint(m, f))
+        # print(f"log(integral) = {log_int}")
+
     return m, f
-    # TODO: expensive computation, need to save results into cache file
 
 
-def test():
-    # DeltaN = 2.25
-    N2 = 25
-    ϵ = 1e-4 
-    h = -20
-    dir_n = "./find_entire_DM/"
-    Path(dir_n).mkdir(parents=True, exist_ok=True)
+def find_N2_window_all(ϵ, ax=None):
+    h_all = [-20]
+    approx_N2 = [[20, 25]]
 
+    for i in range(0, len(h_all)):
+        bracket1 = [approx_N2[i][0] - 1, approx_N2[i][0] + 1]
+        dn1 = join(FIND_N2_DN, f"h={h_all[i]:.1f}-left")
+        m1, f1 = find_N2_window(ϵ, h_all[i], bracket1, dn1)
+
+        bracket2 = [approx_N2[i][1] - 1, approx_N2[i][1] + 1]
+        dn2 = join(FIND_N2_DN, f"h={h_all[i]:.1f}-right")
+        m2, f2 = find_N2_window(ϵ, h_all[i], bracket2, dn2)
+
+        if ax is not None: 
+            ax.plot(m1, f1)
+            ax.plot(m2, f2)
+
+
+def plot_mass_func():
     fig, ax = plt.subplots()
 
     plot_constraints(ax)
-
-    # m, f = find_entire_DM(ϵ, N2, h)
-    # print(m, f)
-    # ax.plot(m, f)
-    ax.plot(*find_N2_window(ϵ, -20, [19.5, 20.5]))
-    # ax.plot(*find_N2_window(ϵ, -20, [24, 25]))
+    find_N2_window_all(1e-4, ax=ax)
 
     ax.set_xscale("log")
     ax.set_yscale("log")
@@ -203,24 +240,16 @@ def test():
     ax.set_ylabel(r"$f_\text{PBH}$")
     ax.set_ylim((1e-4, 3))
 
-    fn = join(dir_n, "f_PBH.pdf") 
-    print(fn)
+    fn = join(FIND_N2_DN, "f_PBH.pdf") 
     plt.savefig(fn, bbox_inches="tight")
     plt.close(fig)
 
+
 if __name__ == "__main__":
-    test()
-
-    # model = USRManuel(1e-4, 1e-5, 25, 2.0, 'tmp/')
-    # ms.save_solve_all(model, toplot=False)
-    # model = USRManuel(1e-4, 1e-5, 25, 2.5, 'tmp/')
-    # ms.save_solve_all(model, toplot=False)
-    # print(ms.get_P_max(model))
+    # model = USRManuel(1e-4, 3.351912804219496e-05 , 19.961953829161633, 2.2, 'tmp/')
+    # ms.save_solve_all(model, toplot=True)
     
-    # find_entire_DM(1e-4, 20, -20)
-    # find_N2_window(1e-4, -20)
+    find_N2_window_all(1e-4)
 
-    # h = -20
-    # N2 = 20 around the lower end of the astroid window 
-    # ΔN ~ 2.31
-    # N2 = 25: ΔN ~ 2.37
+    # h = -20: [19.959870481923993, 24.74341529302672]
+    # plot_mass_func()
