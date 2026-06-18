@@ -7,7 +7,7 @@ import pickle
 from src.abund.ParaClass import ParaClassMod
 from . import ms
 from .ms import USRManuel
-from .common import get_Z, get_M_H, get_zero, timer, get_f_gw
+from .common import get_Z, get_M_H, get_zero, timer, get_f_gw, add_fn_suffix
 from .constants import PEAK_K, MODEL_CACHE_FN, POWER_SPEC_FN
 from . import abund
 from .abund import USR_full
@@ -73,11 +73,14 @@ def fix_h(ϵ, N2, ΔN, h_desired):
     return USRManuel(ϵ, sol, N2, ΔN, None, silent=True)
 
 
-def get_Ω(dn):
-    with open(join(dn, MODEL_CACHE_FN), "rb") as f:
+def get_Ω(dn, suffix=""):
+    fn_model = add_fn_suffix(join(dn, MODEL_CACHE_FN), suffix)
+    fn_ps = add_fn_suffix(join(dn, POWER_SPEC_FN), suffix)
+
+    with open(fn_model, "rb") as f:
         model = pickle.load(f)
 
-    with np.load(join(dn, POWER_SPEC_FN)) as data:
+    with np.load(fn_ps) as data:
         k = data["k"]
         P = data["P"]
 

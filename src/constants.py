@@ -43,4 +43,5 @@ EOM_PLOT_FN = "EOM.pdf"
 # BH_F_FN = "f_m.pkl" 
 BH_F_FN = "f_m.npz" 
 
+GW_PLOT_FN = "GW_Omega.pdf"
 GW_SPEC_FN = "Omega_f.pkl"

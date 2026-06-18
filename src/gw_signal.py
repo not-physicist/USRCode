@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from os.path import join
 
 from .get_single import get_Ω
+from .constants import GW_PLOT_FN
 
 GW_SENS_DN = "data/PLIS/"
 GW_SENS_FN = ["plis_BBO.dat", "plis_LISA.dat", "plis_ET.dat"]
@@ -29,13 +30,14 @@ def _draw_gw_bounds(ax):
     ax.fill_between([1e-6, 1e6], 2e-6, 1, color="grey", alpha=0.5, linewidth=0.0)
     ax.annotate("BBN", [1e-3, 3e-6])
 
-def test():
+
+def plot_Omega(dn):
     fig, ax = plt.subplots()
 
     _draw_gw_bounds(ax)
 
-    ax.plot(*get_Ω("find_N2/h=-20.0-left"))
-    ax.plot(*get_Ω("find_N2/h=-20.0-right"))
+    ax.plot(*get_Ω(dn, "left"))
+    ax.plot(*get_Ω(dn, "right"))
     
     ax.set_xlim((1e-5, 1e1))
     ax.set_ylim((1e-18, 2e-5))
@@ -43,9 +45,7 @@ def test():
     ax.set_yscale("log")
     ax.set_xlabel(r"$f/\text{Hz}$")
     ax.set_ylabel(r"$\Omega_{\text{GW}, 0}h^2$")
-
-    plt.savefig("find_N2/GW.pdf", bbox_inches="tight")
+    
+    fn_Omega = join(dn, GW_PLOT_FN)
+    plt.savefig(fn_Omega, bbox_inches="tight")
     plt.close(fig)
-
-if __name__ == "__main__":
-    test()

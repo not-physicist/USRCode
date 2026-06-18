@@ -5,13 +5,16 @@
 import numpy as np 
 from scipy.integrate import simpson
 from time import perf_counter
+import re
 
 
 Ωcdm = 0.265
 
 def timer(func):
-    # This function shows the execution time of
-    # the function object passed
+    """
+    This function shows the execution time of
+    the function object passed
+    """
     def wrap_func(*args, **kwargs):
         t1 = perf_counter()
         result = func(*args, **kwargs)
@@ -19,6 +22,7 @@ def timer(func):
         print(f'Function {func.__name__!r} executed in {(t2-t1):.4f}s')
         return result
     return wrap_func
+
 
 def check_PDF(x, y):
     """
@@ -30,9 +34,11 @@ def check_PDF(x, y):
     else:
         print(f"PDF not OK: sum={s}")
 
+
 def v_check_PDF(x, Y):
     for y in Y:
         check_PDF(x, y)
+
 
 def get_zero(x):
     return 0
@@ -56,6 +62,18 @@ def convert_sci_not(x, sd=0):
     else:
         return rf"{s[0]} \cdot 10^{{ {int(s[1])} }}"
 
+
+def add_fn_suffix(fn, suffix):
+    """
+    add suffix to filename, just before the .ext
+    """
+    ss = fn.rsplit(".", 1)
+
+    return ss[0] + "-" + suffix + "." + ss[-1]
+
+#################################################################################
+# mathematical formulas
+#################################################################################
 def get_M_H(V, N):
     """
     Horizon mass from number of efolds and V_0. Take g_* = 100
