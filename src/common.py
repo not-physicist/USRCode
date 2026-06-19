@@ -4,8 +4,9 @@
 
 import numpy as np 
 from scipy.integrate import simpson
+from scipy.interpolate import CubicSpline
 from time import perf_counter
-import re
+# import re
 
 
 Ωcdm = 0.265
@@ -70,6 +71,23 @@ def add_fn_suffix(fn, suffix):
     ss = fn.rsplit(".", 1)
 
     return ss[0] + "-" + suffix + "." + ss[-1]
+
+def CubicSplineNoExtra(x, y, extra=0.0, v=True):
+    """
+    wrapper around CubicSpline 
+    so that out of range == 0.0
+    """
+    cs = CubicSpline(x, y)
+    if v:
+        cs_new = lambda X: np.array([cs(Xi) if Xi >= x[0] and Xi <= x[-1] else extra for Xi in X])
+    else:
+        def cs_new(i):
+            if i >= x[0] and i <= x[-1]:
+                return cs(i)
+            else:
+                return 0.0
+    return cs_new
+
 
 #################################################################################
 # mathematical formulas

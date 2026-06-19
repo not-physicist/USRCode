@@ -71,20 +71,3 @@ def fix_h(ϵ, N2, ΔN, h_desired):
     # print(fo)
     print(f"Found the right β for h = {h_desired}: β = {sol}")
     return USRManuel(ϵ, sol, N2, ΔN, None, silent=True)
-
-
-def get_Ω(dn, suffix=""):
-    fn_model = add_fn_suffix(join(dn, MODEL_CACHE_FN), suffix)
-    fn_ps = add_fn_suffix(join(dn, POWER_SPEC_FN), suffix)
-
-    with open(fn_model, "rb") as f:
-        model = pickle.load(f)
-
-    with np.load(fn_ps) as data:
-        k = data["k"]
-        P = data["P"]
-
-    Ω = gw.get_Ω(k, P)
-    f_i = get_f_gw(model.V0, model.N2+model.ΔN)
-    f = f_i * k
-    return f, Ω

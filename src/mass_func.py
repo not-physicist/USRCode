@@ -15,7 +15,7 @@ from .common import add_fn_suffix
 from .abund import USR_full, get_f
 from. import get_single
 from .constants import NUM_THREADS, POWER_SPEC_FN, BH_F_FN, PEAK_K, MODEL_CACHE_FN
-from .gw_signal import plot_Omega
+from .gw_signal import plot_Omega, get_SNR, get_Ω_itp
 
 import scienceplots
 plt.style.use("science")
@@ -32,7 +32,6 @@ PBH_CONST_COORD = [[5e-19, 1e-1], None, None, [2e-10, 5e-2], [2e-5, 2e-1], [1e2,
 PBH_CONST_ROT = [-90, None, None, -80, -45, -90]
 
 PBH_CONST_ENVL_FN = "data/PBHbounds_all.pkl"
-
 
 DELTA_N_RTOL = 1e-7
 N2_RTOL = 1e-5
@@ -109,7 +108,8 @@ def find_entire_DM(ϵ, N2, h_desired, dn=None, suffix=None):
     """
     find the set of parameter to have f_tot = 1
     """
-    ΔN_all = np.linspace(2.2, 2.5, NUM_THREADS)
+    # BUG: depending on h, range of ΔN needs to be adjusted
+    ΔN_all = np.linspace(1.8, 2.3, NUM_THREADS)
     Pmax_all = np.zeros(ΔN_all.shape)
     
     ######################################################
@@ -197,7 +197,9 @@ def find_entire_DM(ϵ, N2, h_desired, dn=None, suffix=None):
 
         fn_model = add_fn_suffix(join(dn, MODEL_CACHE_FN), suffix)
         with open(fn_model, "wb") as f:
+            print("Dumping the model: ", vars(model))
             pickle.dump(model, f)
+        # BUG: no idea why, but "model-right.pkl" contains the left model.
 
     return m, f
 
@@ -226,7 +228,7 @@ def find_N2_window(ϵ, h_desired, bracket, dn, suffix):
             f = data["f"]
     else:
         sol, fo = toms748(_f, *bracket, full_output=True, disp=True, rtol=N2_RTOL)
-        print("Found the right N2!")
+        print("Found the ccorrect N2!")
         print(fo)
 
         # re-compute the mass function 
@@ -238,11 +240,12 @@ def find_N2_window(ϵ, h_desired, bracket, dn, suffix):
 
 
 def find_N2_window_all(ϵ, plot=False):
-    h_all = [-20, -10, -1]
-    approx_N2 = [[18, 24], [18, 24], [18, 24]]
+    h_all = [-20, -10, -5, -1]
+    approx_N2 = [[18, 24], [18, 24], [18, 25], [18, 25]]
 
     for i in range(0, len(h_all)):
         dn = join(FIND_N2_DN, f"h={h_all[i]:.1f}")
+        print(dn)
         Path(dn).mkdir(parents=True, exist_ok=True)
 
         # left == lightest
@@ -273,16 +276,51 @@ def find_N2_window_all(ϵ, plot=False):
             plt.savefig(fn, bbox_inches="tight")
             plt.close(fig)
 
-            # plot_Omega(dn)
+            plot_Omega(dn)
 
+
+def plot_SNR_all():
+    """
+    plot SNR against N2 for the selected h
+    """
+    fig, ax = plt.subplots()
+
+    h_all = [-20, -10, -5, -1]
+    for i in range(0, len(h_all)):
+        dn = join(FIND_N2_DN, f"h={h_all[i]:.1f}")
+
+        N2_bracket, itp_f, itp_Ω = get_Ω_itp(dn)
+
+        N2_all = np.linspace(*N2_bracket, 100)
+        SNR_all = np.zeros(N2_all.shape)
+        for j in range(0, len(N2_all)):
+            f = itp_f(N2_all[j])
+            Ω = itp_Ω(N2_all[j])
+            SNR_all[j] = get_SNR(f, Ω)
+            # ax.plot(f, Ω)
+
+        ax.plot(N2_all, SNR_all, label=f"$h={h_all[i]:.0f}$")
+    
+    ax.set_xlabel("$N_-$")
+    ax.set_ylabel("SNR")
+
+    # ax.set_xscale("log")
+    # ax.set_yscale("log")
+
+    ax.legend()
+    plt.savefig(join(FIND_N2_DN, "SNR_N2.pdf"), bbox_inches="tight")
+    plt.close(fig)
 
 if __name__ == "__main__":
     # save_envelope_all()
 
-    # model = USRManuel(1e-4, 3.351912804219496e-05 , 19.961953829161633, 2.2, 'tmp/')
+    # model = USRManuel(1e-4, 5.243775946638871e-06, 20, 1.8 , 'tmp/')
+    # model = get_single.fix_h(1e-4, 20, 1.8, -1)
     # ms.save_solve_all(model, toplot=True)
     
-    find_N2_window_all(1e-4, True)
+    # find_N2_window_all(1e-4, True)
 
     # h = -20: [18.114994614678395, 24.79124705334623]
     # plot_mass_func()
+
+    plot_SNR_all()

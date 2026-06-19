@@ -11,6 +11,7 @@ from pathos.multiprocessing import ProcessingPool as Pool
 from collections.abc import Callable
 
 from ..constants import NUM_THREADS
+from ..common import CubicSplineNoExtra
 
 # use the formula in Domenech 2021 to calculate GW spectrum
 # from scalar power spectrum
@@ -170,13 +171,7 @@ def get_Ω(k, P):
     
     # Default extrapolation behaviour: extrapolate, can go the negative P 
     # here: outof range k <=> no contribution, set to 0.0
-    cs = CubicSpline(k, P)
-    # get_P = lambda k: np.array([cs(x) if x >= k[0] and x <= k[-1] else 0.0 for x in k])
-    def get_P(x):
-        if x >= k[0] and x <= k[-1]:
-            return cs(x)
-        else:
-            return 0.0
+    get_P = CubicSplineNoExtra(k, P, v=False)
 
     def _get_Ω(x):
         return c_g * Ωr0 *_get_Ω_rh(x, get_P) * h**2

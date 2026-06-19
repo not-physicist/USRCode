@@ -4,6 +4,7 @@
 *.pkl
 *.npz
 *.pdf
+data/*
 figs
 compare_ps
 fixed_height

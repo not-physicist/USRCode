@@ -50,6 +50,10 @@ def save_solve_all(model, toplot=False, N_ms=250, force_new=False, log_k_min=-1,
 
     index_max = np.array([i for i, j in enumerate(P) if j == np.amax(P)])
     P_max = np.amax(P)
+
+    if P_max == np.inf:
+        raise RuntimeError("Power spectrum contains infinity. ABORTING...")
+
     k_max = k[index_max]
     print(f"P_max = {P_max} at {k_max}")
     if k_max > 4 or k_max < 2:
