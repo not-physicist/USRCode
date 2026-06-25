@@ -237,4 +237,3 @@ def plot_f_eta(para):
     plt.legend(fontsize=6)
     plt.savefig("./abund/fig/f(m)_eta.pdf")
     plt.close()
-

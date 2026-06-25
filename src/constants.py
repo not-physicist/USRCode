@@ -4,9 +4,10 @@ more like config file
 import psutil 
 
 # default: use all the cpu threads 
-NUM_THREADS = psutil.cpu_count()
+# NUM_THREADS = psutil.cpu_count()
+NUM_THREADS = 8
 
-# BUG: h=-1 requires 1e-4 and 1e-4
+# NOTE: h=-1, -5 requires 1e-4 and 1e-4
 
 # step size for ODE solvers; in H^-1 or num of efolds
 STEP_SIZE_MODELCLASS = 1e-4
@@ -23,9 +24,8 @@ STEP_SIZE_EOM = 1e-4
 # STEP_SIZE_EOM_USR = 1e-5
 SOLVER_EOM = "DOP853" 
 
-
 # solving MS equations: 1e-2 seems a bit too large, need smaller for nice plots
-STEP_SIZE_MS = 1e-3
+STEP_SIZE_MS = 5e-4
 SOLVER_MS = 'DOP853'
 
 # k/k_i at P = P_max

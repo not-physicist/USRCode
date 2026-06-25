@@ -1,6 +1,7 @@
 from . import EOM 
 from .ModelClass import USRManuel 
 from . import ms
+from . import save_solve_all
 from ..common import convert_sci_not
 
 import matplotlib.pyplot as plt
@@ -8,12 +9,16 @@ import numpy as np
 import pickle
 from pathlib import Path
 from os.path import join
-from scipy.optimize import toms748
+# from scipy.optimize import toms748
 from scipy.integrate import solve_ivp
 
 from ..constants import EOM_PLOT_FN
-from .EOM import _get_f
+# from .EOM import _get_f
 from .ModelClass import solve_USR, solve_SR1
+from ..get_single import fix_h, compute_single
+
+import scienceplots
+plt.style.use('science')
 
 COMPARE_DN = "compare_ps/"
 
@@ -31,9 +36,9 @@ def _get_P_all(fn, models, num, log_k_min, log_k_max):
         P_all = np.zeros((len(models), num))
 
         for i in range(0, len(models)):
-            sol = EOM.solve_eom(models[i], False)
+            # sol = EOM.solve_eom(models[i], False)
 
-            backgrounds = ms.get_ms_quant(models[i], sol)
+            backgrounds = ms.get_ms_quant(models[i], models[i].sol_full)
             k_all[i], P_all[i] = ms.solve_power_spec(*backgrounds, models[i].ϕᵢ, plot_fn=None, num=num, log_k_min=log_k_min, log_k_max=log_k_max)
         
         with open(fn, "wb") as f:
@@ -47,15 +52,17 @@ def compare_DeltaN():
     ϵ = 1e-3 
     β = 1e-4
 
-    num = 200
+    num = 400
     log_k_min = -2
     log_k_max = 3
     fn = "compare_DeltaN"
     cache_fn = join(COMPARE_DN, fn+".pkl")
     fig_fn = join(COMPARE_DN, fn+".pdf")
 
-    DeltaN_all = np.linspace(2.2, 1.8, 3)
+    # DeltaN_all = np.linspace(2.2, 1.8, 3)
+    DeltaN_all = [2.4, 2.2, 2.0, 1.8]
     # technically, can make the following loop run in parallel
+    r'''
     models = [USRManuel(ϵ, β, N2, x, COMPARE_DN) for x in DeltaN_all]
 
     k_all, P_all = _get_P_all(cache_fn, models, num, log_k_min, log_k_max)
@@ -66,6 +73,14 @@ def compare_DeltaN():
     for i in range(0, len(models)):
         label = rf"$\Delta N={DeltaN_all[i]:.2f}$"
         ax.plot(k_all[i], P_all[i], label=label)
+    '''
+
+    fig, ax = plt.subplots()
+    ax.set_title(rf"$N_- = {N2}, \tilde{{\epsilon}}_V = {convert_sci_not(ϵ)}, \beta = {convert_sci_not(β)}$")
+    for i in range(0, len(DeltaN_all)):
+        model = USRManuel(ϵ, β, N2, DeltaN_all[i], COMPARE_DN)
+        k, P = save_solve_all(model, False, N_ms=num, log_k_min=log_k_min, log_k_max=log_k_max, force_new=True, tosave=False)
+        ax.plot(k, P, label=rf"$\Delta N = {DeltaN_all[i]:.1f}$")
 
     ax.set_xscale("log")
     ax.set_yscale("log")
@@ -144,6 +159,7 @@ def compare_eps():
     plt.close(fig)
 
 
+'''
 def find_β(ϵ, N2, ΔN, h_desired, bracket):
     """
     find β to get h = h_desired
@@ -158,6 +174,7 @@ def find_β(ϵ, N2, ΔN, h_desired, bracket):
         return USRManuel(ϵ, sol, N2, ΔN, None, True)
     else:
         raise Exception("Finding β not successful!")
+'''
 
 
 def compare_h():
@@ -165,36 +182,47 @@ def compare_h():
     ΔN = 2.0
     # ϵ_all = [1e-3, 2e-4, 1e-4]
     ϵ = 1e-3
-    β_bracket = [1e-5, 1e-3]
+    # β_bracket = [1e-5, 1e-3]
     # β_brackets = [[1e-4, 1.2e-4], [4.5e-5, 4.7e-5], [3e-5, 3.3e-4]]
     # h = -10
     h_all = [-5, -10, -30]
 
     fn = "compare_h"
-    root_fn = join(COMPARE_DN, fn+"_root.pkl")
-    cache_fn = join(COMPARE_DN, fn+".pkl")
+    # root_fn = join(COMPARE_DN, fn+"_root.pkl")
+    # cache_fn = join(COMPARE_DN, fn+".pkl")
     fig_fn = join(COMPARE_DN, fn+".pdf")
 
-    num = 200
+    num = 400
     log_k_min = -2 
     log_k_max = 3
     
+    '''
     if Path.exists(root_fn):
         with open(root_fn, "rb") as f:
             models = pickle.load(f)
     else:
-        models = [find_β(ϵ, N2, ΔN, h_all[i], β_bracket) for i in [0, 1, 2]]
+        # models = [find_β(ϵ, N2, ΔN, h_all[i], β_bracket) for i in [0, 1, 2]]
+        models = [fix_h(ϵ, N2, ΔN, h_all[i]) for i in [0, 1, 2]]
         with open(root_fn, "wb") as f:
             pickle.dump(models, f)
     
     k_all, P_all = _get_P_all(cache_fn, models, num, log_k_min, log_k_max)
+    '''
 
     fig, ax = plt.subplots()
     ax.set_title(rf"$N_- = {N2}, \Delta N = {ΔN}, \tilde{{\epsilon}}_V = {ϵ}$")
 
     for i in range(0, len(h_all)):
+        model = fix_h(ϵ, N2, ΔN, h_all[i])
+        k, P = save_solve_all(model, False, N_ms=num, log_k_min=log_k_min, log_k_max=log_k_max, force_new=True, tosave=False)
+
         label = rf"$h={h_all[i]:.1f}$"
-        ax.plot(k_all[i], P_all[i], label=label)
+        ax.plot(k, P, label=label)
+
+    model = fix_h(1e-4, N2, ΔN, h_all[0])
+    k, P = save_solve_all(model, False, N_ms=num, log_k_min=log_k_min, log_k_max=log_k_max, force_new=True, tosave=False)
+    label = rf"$h={h_all[0]:.1f}, \tilde{{\epsilon}}_V = 10^{{-4}}$"
+    ax.plot(k, P, label=label, ls="--")
 
     ax.set_xscale("log")
     ax.set_yscale("log")
@@ -315,7 +343,7 @@ if __name__ == "__main__":
     # compare_eps()
 
     # find_β(1e-3, 22, 2.0, -20, [1e-5, 1e-3])
-    # compare_h()
+    compare_h()
 
     # ms.plot_z(model, sol)
     # ms.plot_power_evolution(model, sol)
