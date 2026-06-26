@@ -21,15 +21,13 @@ plt.style.use("science")
 
 from . import common 
 from .common import get_zero, get_one
-
 from .import ms
 from .ms import USRManuel
-
 from .abund import ParaClassMod, get_f_total
-
 from .abund import USR_full, USR_only, USR_smooth
-
 from .constants import POWER_SPEC_FN, POWER_SPEC_PLOT_FN, MODEL_CACHE_FN, PEAK_K
+from .get_single import fix_h, get_P_DeltaN, get_Pmax_DeltaN, compute_single
+
 # from .common import timer 
 
 # relative tolerance for root finding
@@ -63,6 +61,7 @@ def test_single():
     # Ω = get_Ω(dir_n)
     # print(Ω)
 
+'''
 # @timer
 def compute_single(model, only_P_max=False, N_ms=200, force_new=False, log_k_min=-3, log_k_max=4, silent=False):
     """
@@ -90,6 +89,7 @@ def compute_single(model, only_P_max=False, N_ms=200, force_new=False, log_k_min
 
         res = get_fs(model, para, True)
         return [P_max, *res]
+'''
 
 
 def get_fs(model, para, get_Σ=False):
@@ -185,18 +185,18 @@ def plot_fixed_height():
     get the models with appropriate h and P_desire
     plot the sigma's, power spectra, and the abundances
     """
-    P_desired = 2e-3
+    P_desired = 3e-3
     N2 = 20
-    ϵ = 1e-3
-    h_desired_all = [-20]
+    ϵ = 1e-4
+    # h_desired_all = [-20]
     # h_desired_all = [-20, -10, -5, -1]
-    # h_desired_all = np.linspace(-20, -1, 16)
+    h_desired_all = np.linspace(-20, -1, 20)
+    # print(h_desired_all)
     # h_desired_all = np.arange(-20, -1, 2)
     dn = "fixed_height/"
     cmap = colormaps["viridis_r"]
-    N_ms = 500
     # interpolator for approximate roots for P_desired = 2e-3
-    approx_beta_itp = CubicSpline([-20, -10, -5, -1], [9.131304878971815e-05, 5.799549787583399e-05, 3.905100757912693e-05, 1.5805344608102757e-05])
+    # approx_beta_itp = CubicSpline([-20, -10, -5, -1], [9.131304878971815e-05, 5.799549787583399e-05, 3.905100757912693e-05, 1.5805344608102757e-05])
     # 4e-3
     # approx_beta_itp = CubicSpline([-20], [5.689789227406057e-05])
 
@@ -210,29 +210,74 @@ def plot_fixed_height():
     for i in range(0, len(h_desired_all)):
         print("="*100)
         dn_new = join(dn, f"h={h_desired_all[i]:.1f}/")
+        Path(dn_new).mkdir(parents=True, exist_ok=True)
+        '''
         approx_beta = approx_beta_itp(h_desired_all[i])
         bracket = [approx_beta*0.9, approx_beta*1.1]
         model = get_model_fixed_height(N2, ϵ, h_desired_all[i], 
                                        P_desired, bracket, dn_new)
         print(vars(model))
+        
 
         # with open(join(model.dn + POWER_SPEC_FN), "rb") as f:
         #     k, P = pickle.load(f)
 
         if Path(join(model.dn + POWER_SPEC_FN)).exists():
             print("The complete power spectrum has been computed. Skipping...")
-            res[i] = compute_single(model, only_P_max=False, N_ms=N_ms, log_k_min=-2, log_k_max=4, force_new=False)
+            # res[i] = compute_single(model, only_P_max=False, N_ms=N_ms, log_k_min=-2, log_k_max=4, force_new=False)
         else:
             res[i] = compute_single(model, only_P_max=False, N_ms=N_ms, log_k_min=-2, log_k_max=4, force_new=True)
+        '''
+        fn_ps = join(dn_new, POWER_SPEC_FN)
+        fn_model = join(dn_new, MODEL_CACHE_FN)
+        if Path(fn_ps).exists() and Path(fn_model).exists():
+            print("Found cache files. SKIPPING...")
+            with np.load(fn_ps) as data:
+                k = data["k"]
+                P = data["P"]
+            model = pickle.load(open(fn_model, "rb"))
+        elif Path(fn_model).exists():
+            model = pickle.load(open(fn_model, "rb"))
+            k, P = compute_single(model, GetP=True, log_k_min=-2, log_k_max=3)
 
-        print("P_max = ", res[i, 0])
+            np.savez(fn_ps, k=k, P=P)
+            with open(fn_model, "wb") as f:
+                pickle.dump(model, f)
+        else:
+            get_Pmax = get_Pmax_DeltaN(ϵ, N2, h_desired_all[i])
+            sol, fo = toms748(lambda x: get_Pmax(x) - P_desired, 1.8, 2.4, 
+                              rtol=DELTAN_RTOL, full_output=True, disp=True)
+            print(fo)
+
+            # get_Pfull = get_P_DeltaN(ϵ, N2, h_desired_all[i], get_Pmax)
+            # k, P = get_Pfull(sol)
+
+            model = fix_h(ϵ, N2, sol, h_desired_all[i])
+            k, P = compute_single(model, GetP=True, log_k_min=-2, log_k_max=3)
+
+            np.savez(fn_ps, k=k, P=P)
+            with open(fn_model, "wb") as f:
+                pickle.dump(model, f)
+        
+        Z = common.get_Z(model.V0, model.N2)
+        para = ParaClassMod(k, P, Z, None)
+
+        res[i] = [np.amax(P), *get_fs(model, para, get_Σ=True)]
+        print(res[i])
+
+        # print("P_max = ", res[i, 0])
         
         c = cmap(i/(len(h_desired_all)-1))
+        ax.plot(k, P, c=c)
+        # ax.plot(k, P)
+        
+        '''
         if i in range(0, len(h_desired_all))[::2]:
         # skipping some h, so that the PS doesn't look so dense
             with open(join(model.dn + POWER_SPEC_FN), "rb") as f:
-                k, P = pickle.load(f)
+                # k, P = pickle.load(f)
                 ax.plot(k, P, c=c)
+        '''
     
     map = cm.ScalarMappable(norm=plt.Normalize(vmin=np.amin(h_desired_all), vmax=np.amax(h_desired_all)), cmap=cmap)
     fig.colorbar(map, ax=ax, label=r"$h$")

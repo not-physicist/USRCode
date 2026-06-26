@@ -4,18 +4,20 @@ import matplotlib.pyplot as plt
 import pickle
 from pathlib import Path 
 from scipy.integrate import simpson
-from scipy.optimize import toms748
+from scipy.optimize import toms748, root_scalar
 from scipy.interpolate import CubicSpline
 from pathos.multiprocessing import ProcessingPool as Pool
 
 from src.abund.ParaClass import ParaClassMod
 from . import ms
 from .ms import USRManuel, get_P_max
-from .common import add_fn_suffix
+from .common import add_fn_suffix, get_M_H, get_f_gw
 from .abund import USR_full, get_f
 from. import get_single
 from .constants import NUM_THREADS, POWER_SPEC_FN, BH_F_FN, PEAK_K, MODEL_CACHE_FN
-from .gw_signal import plot_Omega, get_SNR, get_Ω_itp
+from .gw_signal import plot_Omega, get_SNR, get_Ω_itp, get_Ω_itp_full
+from .get_single import get_P_DeltaN, get_Pmax_DeltaN, get_f_tot
+from .gw import get_Ω
 
 import scienceplots
 plt.style.use("science")
@@ -28,7 +30,7 @@ plt.style.use("science")
 PBH_CONST_DN = "data/PBHconstraints/"
 PBH_CONST_LIST = ["CMB", "EGR", "Voyager", "SUB", "EROS", "acc"]
 PBH_CONST_LABELS = ["Evap", None, None, "HSC", "EROS", "Accret"]
-PBH_CONST_COORD = [[5e-19, 1e-1], None, None, [2e-10, 5e-2], [2e-5, 2e-1], [1e2, 1e-3]]
+PBH_CONST_COORD = [[5e-19, 1e-1], None, None, [2e-10, 5e-2], [2e-5, 2e-1], [1e2, 1e-2]]
 PBH_CONST_ROT = [-90, None, None, -80, -45, -90]
 
 PBH_CONST_ENVL_FN = "data/PBHbounds_all.pkl"
@@ -108,46 +110,16 @@ def find_entire_DM(ϵ, N2, h_desired, dn=None, suffix=None):
     """
     find the set of parameter to have f_tot = 1
     """
-    # BUG: depending on h, range of ΔN needs to be adjusted
-    ΔN_all = np.linspace(1.8, 2.3, NUM_THREADS)
-    Pmax_all = np.zeros(ΔN_all.shape)
-    
-    ######################################################
-    # first get an interpolator for P_max(ΔN)
-    ######################################################
-    def _g(x):
-        model = get_single.fix_h(ϵ, N2, x, h_desired)
-        return ms.get_P_max(model)
+    cs_Pmax = get_Pmax_DeltaN(ϵ, N2, h_desired)
 
-    with Pool(processes=NUM_THREADS) as pool:
-        Pmax_all = np.array(list(pool.imap(_g, ΔN_all)))
-    
-    print(ΔN_all, Pmax_all)
+    # NOTE: get_P_DeltaN scales the powe spectrum __globally__ 
+    # this is not very accurate in log scale: the first SR is wrong! 
+    # but since we care about the abundance here, it is not important!
+    model, _get_P_all = get_single.get_P_DeltaN(ϵ, N2, h_desired, cs_Pmax)
 
-    # actually P_max(ΔN) follows veyr good power law. But spline seems very simple
-    cs = CubicSpline(ΔN_all, Pmax_all, extrapolate=False)
-    
-    ######################################################
-    # compute the full spectrum using ΔN_all[0]
-    ######################################################
-    model = get_single.fix_h(ϵ, N2, ΔN_all[0], h_desired)
-    k, P = get_single.compute_single(model, GetP=True)
-
-    # it seems that changing N2 changes PEAK_K also.
-    # Using the same PEAK_K should be OK
-    P_max_full = CubicSpline(k, P)(PEAK_K)
-    
     ######################################################
     # use root finding to find the right ΔN to give f_tot = 1
     ######################################################
-    def _get_P_all(x):
-        """
-        need to get the full power specturm from a given ΔN (from interpolation)
-        """
-        P_max_desired = cs(x)
-        P_new = P / P_max_full * P_max_desired
-        # print(P_max_desired, np.amax(P), np.amax(P_new))
-        return k, P_new
 
     def _f(x):
         """
@@ -196,10 +168,9 @@ def find_entire_DM(ϵ, N2, h_desired, dn=None, suffix=None):
         np.savez(fn_bh , m=m, f=f)
 
         fn_model = add_fn_suffix(join(dn, MODEL_CACHE_FN), suffix)
-        with open(fn_model, "wb") as f:
+        with open(fn_model, "wb") as file:
             print("Dumping the model: ", vars(model))
-            pickle.dump(model, f)
-        # BUG: no idea why, but "model-right.pkl" contains the left model.
+            pickle.dump(model, file)
 
     return m, f
 
@@ -221,27 +192,30 @@ def find_N2_window(ϵ, h_desired, bracket, dn, suffix):
     # fn_ps = add_fn_suffix(join(dn, POWER_SPEC_FN), suffix)
     fn_bh = add_fn_suffix(join(dn, BH_F_FN), suffix)
 
-    if Path(fn_bh).exists():
-        print("Found cache files. SKIPPING...")
-        with np.load(fn_bh) as data:
-            m = data["m"]
-            f = data["f"]
-    else:
+    if not Path(fn_bh).exists():
         sol, fo = toms748(_f, *bracket, full_output=True, disp=True, rtol=N2_RTOL)
         print("Found the ccorrect N2!")
         print(fo)
 
         # re-compute the mass function 
-        m, f = find_entire_DM(ϵ, sol, h_desired, dn, suffix)
+        _, _ = find_entire_DM(ϵ, sol, h_desired, dn, suffix)
         # log_int = np.log(check_constraint(m, f))
         # print(f"log(integral) = {log_int}")
+    else:
+        print("Found cache files. SKIPPING...")
+
+    with np.load(fn_bh) as data:
+        m = data["m"]
+        f = data["f"]
 
     return m, f
 
 
 def find_N2_window_all(ϵ, plot=False):
+    # h_all = [-20, -10, -5, -1]
+    # approx_N2 = [[18, 24], [18, 24], [18, 25], [18, 25]]
     h_all = [-20, -10, -5, -1]
-    approx_N2 = [[18, 24], [18, 24], [18, 25], [18, 25]]
+    approx_N2 = [[18, 25], [18, 25], [18, 26], [19, 26]]
 
     for i in range(0, len(h_all)):
         dn = join(FIND_N2_DN, f"h={h_all[i]:.1f}")
@@ -270,7 +244,7 @@ def find_N2_window_all(ϵ, plot=False):
             ax.set_xlabel(r"$M/M_\odot$")
             ax.set_ylabel(r"$f_\text{PBH}$")
             ax.set_xlim(1e-19, 1e4)
-            ax.set_ylim((1e-4, 2))
+            ax.set_ylim((1e-5, 2))
 
             fn = join(dn, "f_PBH.pdf") 
             plt.savefig(fn, bbox_inches="tight")
@@ -311,16 +285,130 @@ def plot_SNR_all():
     plt.savefig(join(FIND_N2_DN, "SNR_N2.pdf"), bbox_inches="tight")
     plt.close(fig)
 
+
+###########################################################################
+# project LISA sensitivity back to f(m)
+###########################################################################
+
+def plot_LISA_f():
+    """
+    expect that the left and right scenarios have been found already
+
+    basic idea: 
+        since the f_tot = 1 has been found, we just need to vary N2 to move it left and right
+    """
+    # h_all = [-20, -10, -5, -1]
+    h_all = [-20, -1]
+    M_H_CACHE = "M_H.npz"
+
+    fig, ax = plt.subplots()
+    plot_constraints(ax)
+
+    for i in range(0, len(h_all)):
+        dn = join(FIND_N2_DN, f"h={h_all[i]:.1f}")
+        # suffixes = ["left", "right"] 
+        
+        fn_M_H = join(dn, M_H_CACHE)
+        if Path(fn_M_H).exists():
+            with np.load(fn_M_H) as data:
+                ftot = data["ftot"]
+                M_H = data["M_H"]
+        else:
+            ftot = np.logspace(-8, 0, num=5)
+            M_H= np.array([_get_ftot_small(dn, x) for x in ftot])
+            np.savez(fn_M_H, ftot=ftot, M_H=M_H)
+
+        # print(ftot_desired_all, M_H_all)
+
+        # ax.plot(M_H[:, 0], ftot)
+        # ax.plot(M_H[:, 1], ftot)
+        ax.fill_betweenx(ftot, M_H[:, 0], M_H[:, 1], alpha=0.4, label=rf"$h={h_all[i]:.1f}$")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(1e-19, 1e4)
+    ax.set_ylim((1e-5, 2))
+    ax.set_xlabel(r"$M/M_\odot$")
+    ax.set_ylabel(r"$f_\text{PBH}$")
+
+    ax.legend(frameon=True)
+    plt.savefig(join(FIND_N2_DN, "LISA_to_f.pdf"), bbox_inches="tight")
+    plt.close(fig)
+
+
+
+def _get_ftot_small(dn, ftot_desired):
+    """
+    get the f_tot(M_H) with SNR == 1
+
+    all the model parameters are taken from model files saved in dn
+    """
+    suffixes = ["left", "right"]
+    
+    fs = [[], []]
+    Ωs = [[], []]
+    N2s = np.zeros(2)
+    for i in [0, 1]:
+        ###################################################
+        # first get ftot == ftot_desired at N2s[0] and N2s[1]
+        ###################################################
+        fn_model = add_fn_suffix(join(dn, MODEL_CACHE_FN), suffixes[i])
+        model_bad = pickle.load(open(fn_model, "rb"))
+        
+        fn_model = add_fn_suffix(join(dn, POWER_SPEC_FN), suffixes[i])
+        with np.load(fn_model) as data:
+            k = data["k"]
+            P = data["P"]
+
+        _get_ftot = lambda x: np.log10(get_f_tot(model_bad, k, P*x)/ftot_desired)
+        sol = root_scalar(_get_ftot, bracket=[1e-2, 1.1], rtol=DELTA_N_RTOL)
+        # print(sol)
+        if not sol.converged:
+            raise RuntimeError("Solver not converged!")
+
+        Ω = get_Ω(k, P*sol.root)
+        f = k * get_f_gw(model_bad.V0, model_bad.N2+model_bad.ΔN)
+
+        SNR = get_SNR(f, Ω)
+        # print(f"SNR = {SNR}")
+
+        fs[i] = f 
+        Ωs[i] = Ω 
+        N2s[i] = model_bad.N2
+   
+    ###################################################
+    # get the interpolators
+    ###################################################
+    _, itp_f, itp_Ω = get_Ω_itp_full(fs[0], Ωs[0], N2s[0], fs[1], Ωs[1], N2s[1])
+    brackets = [[10, N2s[0]], [N2s[1], 30]]
+    ###################################################
+    # compute N2
+    ###################################################
+    M_Hs = np.zeros(2)
+    for i in [0, 1]:
+        sol = root_scalar(lambda x: np.log10(get_SNR(itp_f(x), itp_Ω(x))), 
+                          bracket=brackets[i], rtol=1e-5, method="brentq")
+        if not sol.converged:
+            raise RuntimeError("Solver not converged!")
+
+        fn = add_fn_suffix(join(dn, MODEL_CACHE_FN), suffixes[i])
+        model_bad = pickle.load(open(fn, "rb"))
+        # need to regenerate model object, since V0 is different for different N2
+        model = USRManuel(model_bad.ϵ, model_bad.β, sol.root, model_bad.ΔN, 
+                          None, fast=True, silent=True)
+        M_Hs[i] = get_M_H(model.V0, sol.root)
+    
+    return M_Hs
+
 if __name__ == "__main__":
     # save_envelope_all()
 
     # model = USRManuel(1e-4, 5.243775946638871e-06, 20, 1.8 , 'tmp/')
-    # model = get_single.fix_h(1e-4, 20, 1.8, -1)
+    # model = get_single.fix_h(1e-3, 25, 1.8, -1)
     # ms.save_solve_all(model, toplot=True)
     
-    # find_N2_window_all(1e-4, True)
+    # find_N2_window_all(1e-3, True)
 
-    # h = -20: [18.114994614678395, 24.79124705334623]
-    # plot_mass_func()
+    # plot_SNR_all()
 
-    plot_SNR_all()
+    plot_LISA_f()

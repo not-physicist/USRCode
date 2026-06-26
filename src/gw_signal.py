@@ -140,16 +140,7 @@ def get_SNR(f, Ω):
     return np.sqrt(SNR2)
 
 
-def get_Ω_itp(dn):
-    """
-    get interpolated GW signals between left and right
-    """
-    f1, Ω1 = get_Ω(dn, "left")
-    N2_1 = pickle.load(open(add_fn_suffix(join(dn, MODEL_CACHE_FN), "left"), "rb")).N2
-
-    f2, Ω2 = get_Ω(dn, "right")
-    N2_2 = pickle.load(open(add_fn_suffix(join(dn, MODEL_CACHE_FN), "right"), "rb")).N2
-    
+def get_Ω_itp_full(f1, Ω1, N2_1, f2, Ω2, N2_2):
     # f1 and f2 should only differ by a (universal) constant across all entries
     # TODO: add a single check?
 
@@ -162,3 +153,15 @@ def get_Ω_itp(dn):
     itp_Ω = lambda x: Ω1
 
     return [N2_1, N2_2], itp_f, itp_Ω
+
+def get_Ω_itp(dn):
+    """
+    get interpolated GW signals between left and right
+    """
+    f1, Ω1 = get_Ω(dn, "left")
+    N2_1 = pickle.load(open(add_fn_suffix(join(dn, MODEL_CACHE_FN), "left"), "rb")).N2
+
+    f2, Ω2 = get_Ω(dn, "right")
+    N2_2 = pickle.load(open(add_fn_suffix(join(dn, MODEL_CACHE_FN), "right"), "rb")).N2
+    
+    return get_Ω_itp_full(f1, Ω1, N2_1, f2, Ω2, N2_2)
