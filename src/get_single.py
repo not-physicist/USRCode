@@ -93,7 +93,8 @@ def get_Pmax_DeltaN(ϵ, N2, h_desired):
     with Pool(processes=NUM_THREADS) as pool:
         Pmax_all = np.array(list(pool.imap(_g, ΔN_all)))
     
-    print(ΔN_all, Pmax_all)
+    print("ΔN = ", ΔN_all)
+    print("max(P)=", Pmax_all)
 
     # actually P_max(ΔN) follows veyr good power law. But spline seems very simple
     cs = CubicSpline(ΔN_all, Pmax_all, extrapolate=False)
@@ -101,10 +102,9 @@ def get_Pmax_DeltaN(ϵ, N2, h_desired):
     return cs
 
 def get_P_DeltaN(ϵ, N2, h_desired, cs_Pmax):
-    ######################################################
-    # compute the full spectrum using ΔN_all[0]
-    ######################################################
-    # cs = get_Pmax_DeltaN(ϵ, N2, h_desired)
+    """
+    return the model object and an interpolator (ΔN as input, the PS as output)
+    """
 
     model = fix_h(ϵ, N2, 1.8, h_desired)
     k, P = compute_single(model, GetP=True, log_k_min=-2, log_k_max=3)

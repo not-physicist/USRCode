@@ -38,7 +38,7 @@ PBH_CONST_ENVL_FN = "data/PBHbounds_all.pkl"
 DELTA_N_RTOL = 1e-7
 N2_RTOL = 1e-5
 
-FIND_N2_DN = "find_N2/"
+FIND_N2_DN = "find_N2_1e-4/"
 
 def comp_envelope_all():
     """
@@ -266,20 +266,38 @@ def plot_SNR_all():
         N2_bracket, itp_f, itp_Ω = get_Ω_itp(dn)
 
         N2_all = np.linspace(*N2_bracket, 100)
+
+        fn_model = add_fn_suffix(join(dn, MODEL_CACHE_FN), "left")
+        model = pickle.load(open(fn_model, "rb"))
+        M_H_l = get_M_H(model.V0, model.N2)
+
+        fn_model = add_fn_suffix(join(dn, MODEL_CACHE_FN), "right")
+        model = pickle.load(open(fn_model, "rb"))
+        M_H_r = get_M_H(model.V0, model.N2)
+    
+        itp_M_H = CubicSpline(np.log(N2_bracket), np.log([M_H_l, M_H_r]))
+
+        M_H_all = np.exp(itp_M_H(np.log(N2_all)))
+        # print(M_H_all)
+
         SNR_all = np.zeros(N2_all.shape)
+        SNR_all2 = np.zeros(N2_all.shape)
         for j in range(0, len(N2_all)):
             f = itp_f(N2_all[j])
             Ω = itp_Ω(N2_all[j])
             SNR_all[j] = get_SNR(f, Ω)
             # ax.plot(f, Ω)
+            SNR_all2[j] = get_SNR(f, Ω, 'BBO')
 
-        ax.plot(N2_all, SNR_all, label=f"$h={h_all[i]:.0f}$")
+        l, = ax.plot(M_H_all, SNR_all, label=f"$h={h_all[i]:.0f}$")
+        ax.plot(M_H_all, SNR_all2, ls="--", c=l.get_color())
     
-    ax.set_xlabel("$N_-$")
+    # ax.set_xlabel("$N_-$")
+    ax.set_xlabel(r"$M_H/M_\odot$")
     ax.set_ylabel("SNR")
 
-    # ax.set_xscale("log")
-    # ax.set_yscale("log")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
 
     ax.legend()
     plt.savefig(join(FIND_N2_DN, "SNR_N2.pdf"), bbox_inches="tight")
@@ -409,6 +427,6 @@ if __name__ == "__main__":
     
     # find_N2_window_all(1e-3, True)
 
-    # plot_SNR_all()
+    plot_SNR_all()
 
-    plot_LISA_f()
+    # plot_LISA_f()

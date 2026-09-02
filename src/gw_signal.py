@@ -64,6 +64,16 @@ def plot_Omega(dn):
     plt.close(fig)
 
 
+def _get_Ω(k, P, model):
+    Ω = gw.get_Ω(k, P)
+    f_i = get_f_gw(model.V0, model.N2+model.ΔN)
+    f = f_i * k
+    return f, Ω
+
+def _get_Ω_tot(k, P, model):
+    f, Ω = _get_Ω(k, P, model)
+    return simpson(Ω, np.log(f))
+
 def get_Ω(dn, suffix=""):
     """
     to compute and save the GW signals Ωh^2
@@ -88,12 +98,9 @@ def get_Ω(dn, suffix=""):
         k = data["k"]
         P = data["P"]
 
-    Ω = gw.get_Ω(k, P)
-    f_i = get_f_gw(model.V0, model.N2+model.ΔN)
-    f = f_i * k
+    f, Ω = _get_Ω(k, P, model)
 
     np.savez(fn_GW, f=f, Omega=Ω)
-
     return f, Ω
 
 def _comp_SNR(f, Omega, log_f_det, log_Omega_det):
@@ -112,25 +119,25 @@ def _comp_SNR(f, Omega, log_f_det, log_Omega_det):
     # BUG: this reults seems wrong!
 
 
-def save_strain_data():
+def save_strain_data(exp="LISA"):
     """
-    read Ωh^2_LISA(f) from file and save to npz for faster read-out time
+    read Ωh^2(f) from file and save to npz for faster read-out time
     """
-    fn = "data/GWstrain/strain_LISA.dat"
+    fn = f"data/GWstrain/strain_{exp}.dat"
     data = np.loadtxt(fn, comments="#").T
     log_f = data[0] 
     log_Omega = data[1]
-    np.savez("data/LISA_strain.npz", log_f=log_f, log_Omega=log_Omega)
+    np.savez(f"data/{exp}_strain.npz", log_f=log_f, log_Omega=log_Omega)
 
 
-def get_SNR(f, Ω):
+def get_SNR(f, Ω, exp="LISA"):
     """
     read the Omega h^2 from file and calculate SNR of LISA
     """
     # f, Ω = get_Ω(dn, suffix)
     
     # reading the npz file is ~ 5ms, very fast!
-    with np.load("data/LISA_strain.npz") as data:
+    with np.load(f"data/{exp}_strain.npz") as data:
         log_f = data["log_f"]
         log_Omega = data["log_Omega"]
 
@@ -165,3 +172,7 @@ def get_Ω_itp(dn):
     N2_2 = pickle.load(open(add_fn_suffix(join(dn, MODEL_CACHE_FN), "right"), "rb")).N2
     
     return get_Ω_itp_full(f1, Ω1, N2_1, f2, Ω2, N2_2)
+
+
+if __name__ == "__main__":
+    save_strain_data("BBO")
